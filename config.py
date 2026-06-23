@@ -15,7 +15,12 @@ SCALABILITY NOTE:
 """
 
 import datetime
+import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Initialize/Load environment variables early in the configuration setup
+load_dotenv()
 
 CURRENT_YEAR = datetime.datetime.now().year
 
@@ -40,6 +45,11 @@ VIDEO_FILENAME_TEMPLATE = "{lang}.mp4"
 CHANNEL_NAME   = "Fabio Egypt"
 CHANNEL_HANDLE = "@FabioEgyptItaly"
 
+# ─── Browser Selection Flags ──────────────────────────────────────────────────
+# Control which browser automation software is active
+USE_BITBROWSER = True
+USE_ADSPOWER   = False
+
 # ─── AdsPower Local API ────────────────────────────────────────────────────────
 # AdsPower must be running on the local machine for this to work.
 ADSPOWER_API_BASE = "http://127.0.0.1:50325/api/v1/browser"
@@ -47,7 +57,16 @@ ADSPOWER_API_BASE = "http://127.0.0.1:50325/api/v1/browser"
 # Map each language code → its AdsPower profile user_id.
 # To add EN in the future: "EN": "<adspower_profile_id_for_EN_account>"
 ADSPOWER_PROFILES: dict[str, str] = {
-    "IT": "k1dscqy8",
+    "IT": os.getenv("ADSPOWER_PROFILE_IT", "k1dscqy8"),
+}
+
+# ─── BitBrowser Local API ──────────────────────────────────────────────────────
+# BitBrowser must be running on the local machine for this to work.
+BITBROWSER_API_BASE = "http://127.0.0.1:54345/browser"
+
+# Map each language code → its BitBrowser profile user_id.
+BITBROWSER_PROFILES: dict[str, str] = {
+    "IT": os.getenv("BITBROWSER_PROFILE_IT", "7c74bf2e8a264e72aaaf29c2f6432e29"),
 }
 
 # ─── Scheduling — Egypt Timezone (EET / UTC+2 year-round) ─────────────────────

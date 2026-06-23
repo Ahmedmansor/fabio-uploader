@@ -23,7 +23,14 @@ import requests
 from dotenv import load_dotenv
 from playwright.sync_api import Browser, Playwright
 
-from config import ADSPOWER_API_BASE, ADSPOWER_PROFILES
+from config import (
+    USE_BITBROWSER,
+    USE_ADSPOWER,
+    ADSPOWER_API_BASE,
+    ADSPOWER_PROFILES,
+    BITBROWSER_API_BASE,
+    BITBROWSER_PROFILES,
+)
 
 # Load environment variables (contains ADSPOWER_API_KEY)
 load_dotenv()
@@ -52,83 +59,140 @@ def _get_headers() -> dict:
 
 def get_profile_id(lang: str) -> str:
     """
-    Return the AdsPower profile user_id for the given language code.
+    Return the browser profile user_id for the given language code.
 
     Raises:
         KeyError: if no profile is configured for *lang* in config.py.
     """
-    profile_id = ADSPOWER_PROFILES.get(lang)
-    if not profile_id:
-        raise KeyError(
-            f"No AdsPower profile configured for language '{lang}'. "
-            f"Add it to ADSPOWER_PROFILES in config.py."
-        )
-    return profile_id
+    if USE_BITBROWSER:
+        profile_id = BITBROWSER_PROFILES.get(lang)
+        if not profile_id:
+            raise KeyError(
+                f"No BitBrowser profile configured for language '{lang}'. "
+                f"Add it to BITBROWSER_PROFILES in config.py."
+            )
+        return profile_id
+    else:
+        profile_id = ADSPOWER_PROFILES.get(lang)
+        if not profile_id:
+            raise KeyError(
+                f"No AdsPower profile configured for language '{lang}'. "
+                f"Add it to ADSPOWER_PROFILES in config.py."
+            )
+        return profile_id
 
 
 # ─── Browser Lifecycle ─────────────────────────────────────────────────────────
 
 def start_browser(lang: str) -> dict:
     """
-    Start the AdsPower browser profile for *lang* via the Local API.
+    Start the browser profile for *lang* via the active browser's Local API.
 
-    Returns the full parsed JSON data block from the API response, which
-    contains the ws.puppeteer endpoint needed to attach Playwright.
+    Returns a dict containing ws connection info. Conforming to AdsPower format:
+    {"ws": {"puppeteer": ws_url}}
 
     Raises:
-        RuntimeError: on API errors or non-zero status codes.
+        RuntimeError: on API errors.
     """
     profile_id = get_profile_id(lang)
-    logger.info("[AdsPower] Starting profile '%s' for lang='%s'…", profile_id, lang)
 
-    params = {
-        "user_id": profile_id,
-        "open_tabs": 1,         # open a new tab in the profile
-        "ip_tab": 0,            # don't open the IP checker tab
-    }
+    if USE_BITBROWSER:
+        logger.info("[BitBrowser] Starting profile '%s' for lang='%s'…", profile_id, lang)
+        url = f"{BITBROWSER_API_BASE}/open"
+        try:
+            resp = requests.post(
+                url,
+                json={"id": profile_id},
+                timeout=_API_TIMEOUT,
+            )
+            resp.raise_for_status()
+        except requests.RequestException as exc:
+            raise RuntimeError(
+                f"[BitBrowser] HTTP request to Local API failed: {exc}\n"
+                "Is BitBrowser running? Is the Local API enabled (port 54345)?"
+            ) from exc
 
-    try:
-        resp = requests.get(
-            _START_URL,
-            params=params,
-            headers=_get_headers(),
-            timeout=_API_TIMEOUT,
+        payload = resp.json()
+        logger.debug("[BitBrowser] /open response: %s", payload)
+
+        if not payload.get("success"):
+            raise RuntimeError(
+                f"[BitBrowser] /open returned error: {payload.get('msg')}"
+            )
+
+        data = payload.get("data", {})
+        ws_url = data.get("ws")
+        if not ws_url:
+            ws_url = data.get("wsUrl")
+
+        if not ws_url:
+            raise RuntimeError(
+                f"[BitBrowser] No WebSocket address in API response. Full payload: {payload}"
+            )
+
+        # Standardize ws:// prefix if missing
+        if ws_url and not ws_url.startswith("ws"):
+            ws_url = f"ws://{ws_url}"
+
+        logger.info(
+            "[BitBrowser] Profile started. WS endpoint: %s",
+            ws_url,
         )
-        resp.raise_for_status()
-    except requests.RequestException as exc:
-        raise RuntimeError(
-            f"[AdsPower] HTTP request to Local API failed: {exc}\n"
-            "Is AdsPower running? Is the Local API enabled (port 50325)?"
-        ) from exc
 
-    payload = resp.json()
-    logger.debug("[AdsPower] /start response: %s", payload)
+        time.sleep(2)
+        return {"ws": {"puppeteer": ws_url}}
 
-    if payload.get("code") != 0:
-        raise RuntimeError(
-            f"[AdsPower] /start returned error — code={payload.get('code')}, "
-            f"msg={payload.get('msg')}"
+    else:
+        logger.info("[AdsPower] Starting profile '%s' for lang='%s'…", profile_id, lang)
+
+        params = {
+            "user_id": profile_id,
+            "open_tabs": 1,         # open a new tab in the profile
+            "ip_tab": 0,            # don't open the IP checker tab
+        }
+
+        try:
+            resp = requests.get(
+                _START_URL,
+                params=params,
+                headers=_get_headers(),
+                timeout=_API_TIMEOUT,
+            )
+            resp.raise_for_status()
+        except requests.RequestException as exc:
+            raise RuntimeError(
+                f"[AdsPower] HTTP request to Local API failed: {exc}\n"
+                "Is AdsPower running? Is the Local API enabled (port 50325)?"
+            ) from exc
+
+        payload = resp.json()
+        logger.debug("[AdsPower] /start response: %s", payload)
+
+        if payload.get("code") != 0:
+            raise RuntimeError(
+                f"[AdsPower] /start returned error — code={payload.get('code')}, "
+                f"msg={payload.get('msg')}"
+            )
+
+        data = payload.get("data", {})
+        ws_info = data.get("ws", {})
+        cdp_endpoint = ws_info.get("puppeteer") or ws_info.get("selenium")
+
+        if not cdp_endpoint:
+            raise RuntimeError(
+                f"[AdsPower] No WebSocket CDP endpoint in API response. "
+                f"Full data block: {data}"
+            )
+
+        logger.info(
+            "[AdsPower] Profile started. CDP endpoint: %s",
+            cdp_endpoint,
         )
 
-    data = payload.get("data", {})
-    ws_info = data.get("ws", {})
-    cdp_endpoint = ws_info.get("puppeteer") or ws_info.get("selenium")
+        # Brief pause to let the browser fully initialise before we attach
+        time.sleep(2)
 
-    if not cdp_endpoint:
-        raise RuntimeError(
-            f"[AdsPower] No WebSocket CDP endpoint in API response. "
-            f"Full data block: {data}"
-        )
-
-    logger.info(
-        "[AdsPower] Profile started. CDP endpoint: %s",
-        cdp_endpoint,
-    )
-
-    # Brief pause to let the browser fully initialise before we attach
-    time.sleep(2)
-
-    return data
+        return data
 
 
 def connect_playwright_to_browser(playwright: Playwright, cdp_endpoint: str) -> Browser:
@@ -152,27 +216,50 @@ def connect_playwright_to_browser(playwright: Playwright, cdp_endpoint: str) -> 
 
 def stop_browser(lang: str) -> None:
     """
-    Stop the AdsPower browser profile for *lang* via the Local API.
+    Stop the active browser profile for *lang* via the Local API.
 
     This is a best-effort call — failure is logged but not re-raised, so it
     won't mask the original upload result.
     """
-    try:
-        profile_id = get_profile_id(lang)
-        resp = requests.get(
-            _STOP_URL,
-            params={"user_id": profile_id},
-            headers=_get_headers(),
-            timeout=_API_TIMEOUT,
-        )
-        resp.raise_for_status()
-        payload = resp.json()
-        if payload.get("code") == 0:
-            logger.info("[AdsPower] Profile '%s' stopped successfully.", profile_id)
-        else:
-            logger.warning(
-                "[AdsPower] /stop returned non-zero — code=%s, msg=%s",
-                payload.get("code"), payload.get("msg"),
+    profile_id = get_profile_id(lang)
+
+    if USE_BITBROWSER:
+        logger.info("[BitBrowser] Stopping profile '%s' for lang='%s'…", profile_id, lang)
+        url = f"{BITBROWSER_API_BASE}/close"
+        try:
+            resp = requests.post(
+                url,
+                json={"id": profile_id},
+                timeout=_API_TIMEOUT,
             )
-    except Exception as exc:
-        logger.warning("[AdsPower] Could not stop profile for lang='%s': %s", lang, exc)
+            resp.raise_for_status()
+            payload = resp.json()
+            if payload.get("success"):
+                logger.info("[BitBrowser] Profile '%s' stopped successfully.", profile_id)
+            else:
+                logger.warning(
+                    "[BitBrowser] /close returned failure — msg=%s",
+                    payload.get("msg"),
+                )
+        except Exception as exc:
+            logger.warning("[BitBrowser] Could not stop profile for lang='%s': %s", lang, exc)
+    else:
+        logger.info("[AdsPower] Stopping profile '%s' for lang='%s'…", profile_id, lang)
+        try:
+            resp = requests.get(
+                _STOP_URL,
+                params={"user_id": profile_id},
+                headers=_get_headers(),
+                timeout=_API_TIMEOUT,
+            )
+            resp.raise_for_status()
+            payload = resp.json()
+            if payload.get("code") == 0:
+                logger.info("[AdsPower] Profile '%s' stopped successfully.", profile_id)
+            else:
+                logger.warning(
+                    "[AdsPower] /stop returned non-zero — code=%s, msg=%s",
+                    payload.get("code"), payload.get("msg"),
+                )
+        except Exception as exc:
+            logger.warning("[AdsPower] Could not stop profile for lang='%s': %s", lang, exc)

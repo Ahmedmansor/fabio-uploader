@@ -326,10 +326,22 @@ def _set_video_file(page: Page, video_path: Path) -> None:
     if not video_path.exists():
         raise FileNotFoundError(f"Video file not found: {video_path}")
 
-    # Direct file input setting bypasses the OS file dialog popup completely,
-    # starting the upload instantly without delay.
-    page.set_input_files(SEL.FILE_INPUT, str(video_path))
-    human_sleep(1.5, 3.0)
+    # Use expect_file_chooser because the underlying input[type="file"] is hidden
+    # and direct set_input_files will timeout waiting for actionability/visibility.
+    with page.expect_file_chooser(timeout=30_000) as fc_info:
+        human_sleep(0.3, 0.8)
+        page.click(SEL.SELECT_FILES_BTN)
+
+    file_chooser = fc_info.value
+    file_chooser.set_files(str(video_path))
+    human_sleep(1.0, 2.0)
+
+    # Quickly check for upload progress bar to verify upload started
+    try:
+        page.wait_for_selector(SEL.UPLOAD_PROGRESS, state="attached", timeout=8_000)
+        logger.info("Upload progress bar detected — file upload underway.")
+    except PlaywrightTimeout:
+        logger.warning("Upload progress bar not detected within 8s — proceeding anyway.")
 
 
 def _fill_details(page: Page, metadata: dict) -> None:
