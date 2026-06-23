@@ -1,5 +1,40 @@
 {
-  "2026-06-22": {
-    "IT": 0
+  "2026-06-23": {
+    "IT": {
+      "youtube": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      },
+      "facebook": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      },
+      "instagram": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      }
+    }
+  },
+  "2026-06-24": {
+    "IT": {
+      "facebook": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      },
+      "instagram": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      }
+    }
   }
 }

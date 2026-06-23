@@ -693,7 +693,10 @@ class YouTubeUploader(BaseUploader):
         except Exception as exc:
             self.logger.exception("Unexpected error during upload: %s", exc)
         finally:
-            # Always stop the AdsPower profile, even on failure
-            stop_browser(self.lang)
+            # NOTE: stop_browser is intentionally NOT called here.
+            # The BitBrowser profile must remain running after the upload so the
+            # user can inspect it and close it manually to conserve daily API limits.
+            # stop_browser(self.lang)
+            pass
 
         return False

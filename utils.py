@@ -133,6 +133,27 @@ def find_video_file(folder_path: Path, lang: str) -> Path | None:
     return video_path if video_path.exists() else None
 
 
+def find_thumbnail(folder_path: Path) -> Path | None:
+    """
+    Look for a thumbnail image file whose name starts with 'Thumbnail'
+    (case-insensitive) inside *folder_path*.
+
+    Supported extensions: jpg, jpeg, png, webp — searched in that order.
+    Returns the first match found, or None if no thumbnail exists.
+
+    NOTE: This function is ONLY called for Meta (Facebook + Instagram) uploads.
+    The YouTube uploader never receives a thumbnail path.
+    """
+    for ext in ("jpg", "jpeg", "png", "webp"):
+        for pattern in (f"Thumbnail*.{ext}", f"thumbnail*.{ext}"):
+            matches = sorted(folder_path.glob(pattern))
+            if matches:
+                logger = logging.getLogger(__name__)
+                logger.debug("Thumbnail found: %s", matches[0].name)
+                return matches[0]
+    return None
+
+
 def move_folder_to_done(folder_path: Path, done_dir: Path) -> None:
     """
     Move a completed video folder into the Uploaded_Done directory.
