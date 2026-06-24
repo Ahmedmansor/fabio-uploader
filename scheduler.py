@@ -201,6 +201,49 @@ def get_next_slot_meta(lang: str) -> tuple[datetime, str]:
     )
 
 
+def get_next_slot_tiktok(lang: str) -> tuple[datetime, str]:
+    """
+    Find the next available slot for TikTok.
+
+    Reads peak times from pipeline_config.TIKTOK_PEAK_TIMES.
+
+    Returns:
+        (scheduled_datetime, date_key_str)
+    """
+    from pipeline_config import TIKTOK_PEAK_TIMES  # lazy import avoids circular deps
+
+    tracker = load_schedule_tracker()
+    now     = datetime.now(_tz)
+    today   = now.date()
+    trains  = TIKTOK_PEAK_TIMES[lang]
+
+    for day_offset in range(31):
+        candidate_date = today + timedelta(days=day_offset)
+        date_key       = candidate_date.isoformat()
+        tt_count       = _get_platform_count(tracker, date_key, lang, "tiktok")
+
+        if tt_count >= MAX_UPLOADS_PER_LANG_PER_DAY:
+            logger.debug(
+                "[%s][tiktok] %s fully booked (tiktok=%d) — skipping.",
+                lang, date_key, tt_count,
+            )
+            continue
+
+        for slot in trains:
+            candidate_dt = _build_candidate(candidate_date, slot)
+            if candidate_dt > now + timedelta(minutes=2):
+                logger.info(
+                    "[%s][tiktok] Next slot → %s at %s (Egypt TZ)",
+                    lang, date_key, candidate_dt.strftime("%H:%M %Z"),
+                )
+                return candidate_dt, date_key
+
+    raise RuntimeError(
+        f"[{lang}][tiktok] No available TikTok slot found within 30 days. "
+        "Check schedule_tracker.json for anomalies."
+    )
+
+
 def increment_upload_count(
     lang: str,
     platform: str,

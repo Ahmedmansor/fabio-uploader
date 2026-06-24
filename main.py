@@ -70,11 +70,18 @@ from config import (
     UPLOAD_STATE_FILE,
     UPLOADED_DONE_DIR,
 )
-from pipeline_config import ENABLE_FACEBOOK, ENABLE_INSTAGRAM, ENABLE_YOUTUBE
+from pipeline_config import (
+    ENABLE_FACEBOOK,
+    ENABLE_INSTAGRAM,
+    ENABLE_YOUTUBE,
+    ENABLE_TIKTOK,
+    ENABLE_TELEGRAM,
+)
 from metadata_agent import generate_metadata_for_folder
 from scheduler import (
     get_next_slot,
     get_next_slot_meta,
+    get_next_slot_tiktok,
     increment_upload_count,
 )
 from utils import (
@@ -87,6 +94,8 @@ from utils import (
 )
 from youtube_uploader import YouTubeUploader
 from meta_uploader import MetaUploader
+from tiktok_uploader import TikTokUploader
+from telegram_notifier import send_telegram_status
 
 # ── Force UTF-8 for Windows terminals ─────────────────────────────────────────
 if hasattr(sys.stdout, "reconfigure"):
@@ -98,7 +107,7 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 # ─── Platform & Status Constants ─────────────────────────────────────────────
-PLATFORMS = ["youtube", "facebook", "instagram"]
+PLATFORMS = ["youtube", "facebook", "instagram", "tiktok"]
 
 STATUS_PENDING = "pending"
 STATUS_LOADING = "loading"
@@ -120,6 +129,7 @@ def _is_platform_enabled(platform: str) -> bool:
         "youtube":   ENABLE_YOUTUBE,
         "facebook":  ENABLE_FACEBOOK,
         "instagram": ENABLE_INSTAGRAM,
+        "tiktok":    ENABLE_TIKTOK,
     }[platform]
 
 
@@ -509,6 +519,51 @@ def _run_meta(
     return state
 
 
+def _run_tiktok(
+    folder: str,
+    video_path: Path,
+    thumbnail_path: Path | None,
+    metadata: dict,
+    state: dict,
+    dry_run: bool,
+) -> dict:
+    """
+    Attempt the TikTok upload for *folder* with one retry.
+    Logs each attempt with a real-world timestamp for midnight-crossing audits.
+    """
+    lang = "IT"
+    tt_scheduled, tt_date_key = get_next_slot_tiktok(lang)
+    state = _set_status(state, folder, lang, "tiktok", STATUS_LOADING)
+    uploader = TikTokUploader(lang=lang, thumbnail_path=thumbnail_path)
+
+    for attempt in range(1, 3):
+        logger.info("[%s][tiktok] Upload attempt %d/2…", folder, attempt)
+        # Record this attempt before launching so midnight-crossing is captured
+        state = _record_attempt(state, folder, lang, "tiktok")
+
+        success = uploader.upload(
+            video_path=video_path,
+            metadata=metadata,
+            scheduled_time=tt_scheduled,
+            dry_run=dry_run,
+        )
+        if success:
+            state = _set_status(state, folder, lang, "tiktok", STATUS_SUCCESS)
+            increment_upload_count(lang, "tiktok", tt_date_key, tt_scheduled)
+            return state
+
+        if attempt == 1:
+            logger.warning(
+                "[%s][tiktok] Attempt 1 failed — cooling down %ds before retry…",
+                folder, UPLOAD_RETRY_COOLDOWN_SEC,
+            )
+            time.sleep(UPLOAD_RETRY_COOLDOWN_SEC)
+
+    logger.error("[%s][tiktok] Both attempts failed — marking ERROR.", folder)
+    state = _set_status(state, folder, lang, "tiktok", STATUS_ERROR)
+    return state
+
+
 # ─── Main Folder Processor ────────────────────────────────────────────────────
 
 def _process_folder(
@@ -614,6 +669,28 @@ def _process_folder(
                 folder, video_path, thumbnail_path, metadata, state, dry_run
             )
 
+    # ── TikTok ────────────────────────────────────────────────────────────────
+    if not ENABLE_TIKTOK:
+        tt_status = _get_platform_status(state, folder, lang, "tiktok")
+        if tt_status != STATUS_SUCCESS:
+            logger.info("[%s] TikTok DISABLED — marking as skipped.", folder)
+            state = _set_status(state, folder, lang, "tiktok", STATUS_SKIPPED)
+        else:
+            logger.info("[%s] TikTok already succeeded — leaving status intact.", folder)
+    else:
+        tt_status = _get_platform_status(state, folder, lang, "tiktok")
+        if tt_status == STATUS_SUCCESS:
+            logger.info("[%s] TikTok already uploaded — skipping.", folder)
+        else:
+            if tt_status == STATUS_SKIPPED:
+                logger.info(
+                    "[%s] TikTok was previously skipped — now re-enabled. Retrying…",
+                    folder,
+                )
+            thumbnail_path = find_thumbnail(folder_path)
+            logger.info("[%s] Running TikTok upload…", folder)
+            state = _run_tiktok(folder, video_path, thumbnail_path, metadata, state, dry_run)
+
     return state
 
 
@@ -651,6 +728,7 @@ def _pre_flight(dry_run: bool) -> None:
     logger.info("  YouTube    : %s", "ON" if ENABLE_YOUTUBE   else "OFF (will be skipped)")
     logger.info("  Facebook   : %s", "ON" if ENABLE_FACEBOOK  else "OFF (will be skipped)")
     logger.info("  Instagram  : %s", "ON" if ENABLE_INSTAGRAM else "OFF (will be skipped)")
+    logger.info("  TikTok     : %s", "ON" if ENABLE_TIKTOK    else "OFF (will be skipped)")
     logger.info("=" * 64)
 
     if not UPLOAD_QUEUE_DIR.exists() or not any(UPLOAD_QUEUE_DIR.iterdir()):
@@ -755,6 +833,27 @@ def main() -> None:
         attempts = entry.get("attempts_count", 0) if isinstance(entry, dict) else "?"
         logger.info("  %-12s → %-25s (total attempts: %s)", p, status.upper(), attempts)
     logger.info("=" * 64)
+
+    # 8. Send Telegram Notification
+    try:
+        final_statuses = {}
+        scheduled_times = {}
+        from scheduler import load_schedule_tracker
+        tracker = load_schedule_tracker()
+        for date_key in sorted(tracker.keys(), reverse=True):
+            lang_data = tracker[date_key].get(lang, {})
+            for p in PLATFORMS:
+                if p not in scheduled_times:
+                    p_data = lang_data.get(p, {})
+                    times = p_data.get("scheduled_times", [])
+                    if times:
+                        scheduled_times[p] = f"{date_key} {times[-1]}"
+        for p in PLATFORMS:
+            entry = it_state.get(p, {})
+            final_statuses[p] = _extract_status(entry)
+        send_telegram_status(target_folder, final_statuses, scheduled_times)
+    except Exception as exc:
+        logger.warning("Could not dispatch Telegram status report: %s", exc)
 
 
 if __name__ == "__main__":

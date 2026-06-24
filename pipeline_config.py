@@ -17,6 +17,12 @@ IMPORTANT — Facebook & Instagram:
 ENABLE_YOUTUBE   = True
 ENABLE_FACEBOOK  = True
 ENABLE_INSTAGRAM = True
+ENABLE_TIKTOK    = True
+
+# ─── Telegram Notifier ───────────────────────────────────────────────────────
+# True  → send notification to Telegram Bot if bot credentials exist in .env.
+# False → disabled.
+ENABLE_TELEGRAM  = False
 
 # ─── Meta Business Suite Composer URL ────────────────────────────────────────
 # The pipeline navigates here automatically when no Meta Business Suite tab is
@@ -28,9 +34,18 @@ ENABLE_INSTAGRAM = True
 #   "?asset_id=1106891826149093&business_id=1177063933416599"
 META_COMPOSER_URL = "https://business.facebook.com/latest/reels_composer"
 
+# ─── TikTok Studio Creator Center Upload URL ──────────────────────────────────
+TIKTOK_UPLOAD_URL = "https://www.tiktok.com/tiktokstudio/upload?from=creator_center"
+
 # ─── Meta Peak Time — Egypt Timezone (Africa/Cairo) ──────────────────────────
 # Facebook and Instagram are always scheduled at the same time (one session).
 # Values are 24-hour Egypt TZ. Add "EN" here when adding English support.
 META_PEAK_TIMES: dict[str, list[dict[str, int]]] = {
+    "IT": [{"hour": 21, "minute": 0}],   # 21:00 Egypt = 20:00 Italy
+}
+
+# ─── TikTok Peak Time — Egypt Timezone (Africa/Cairo) ────────────────────────
+# Values are 24-hour Egypt TZ.
+TIKTOK_PEAK_TIMES: dict[str, list[dict[str, int]]] = {
     "IT": [{"hour": 21, "minute": 0}],   # 21:00 Egypt = 20:00 Italy
 }

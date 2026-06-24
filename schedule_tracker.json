@@ -23,13 +23,17 @@
   },
   "2026-06-24": {
     "IT": {
-      "facebook": {
+      "tiktok": {
         "count": 1,
         "scheduled_times": [
           "21:00"
         ]
-      },
-      "instagram": {
+      }
+    }
+  },
+  "2026-06-25": {
+    "IT": {
+      "tiktok": {
         "count": 1,
         "scheduled_times": [
           "21:00"
