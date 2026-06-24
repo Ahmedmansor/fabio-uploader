@@ -95,7 +95,7 @@ from utils import (
 from youtube_uploader import YouTubeUploader
 from meta_uploader import MetaUploader
 from tiktok_uploader import TikTokUploader
-from telegram_notifier import send_telegram_status
+from telegram_notifier import send_telegram_report
 
 # ── Force UTF-8 for Windows terminals ─────────────────────────────────────────
 if hasattr(sys.stdout, "reconfigure"):
@@ -803,8 +803,10 @@ def main() -> None:
         return
 
     # 5. Run the multi-platform upload pipeline
+    start_time = time.time()
     state    = _process_folder(target_folder, folder_path, metadata, state, args.dry_run)
     it_state = state.get(target_folder, {}).get(lang, {})
+    end_time = time.time()
 
     # 6. Archive ONLY when ALL THREE platforms are "success"
     if _all_done(it_state):
@@ -834,26 +836,33 @@ def main() -> None:
         logger.info("  %-12s → %-25s (total attempts: %s)", p, status.upper(), attempts)
     logger.info("=" * 64)
 
-    # 8. Send Telegram Notification
-    try:
-        final_statuses = {}
-        scheduled_times = {}
-        from scheduler import load_schedule_tracker
-        tracker = load_schedule_tracker()
-        for date_key in sorted(tracker.keys(), reverse=True):
-            lang_data = tracker[date_key].get(lang, {})
-            for p in PLATFORMS:
-                if p not in scheduled_times:
-                    p_data = lang_data.get(p, {})
-                    times = p_data.get("scheduled_times", [])
-                    if times:
-                        scheduled_times[p] = f"{date_key} {times[-1]}"
-        for p in PLATFORMS:
-            entry = it_state.get(p, {})
-            final_statuses[p] = _extract_status(entry)
-        send_telegram_status(target_folder, final_statuses, scheduled_times)
-    except Exception as exc:
-        logger.warning("Could not dispatch Telegram status report: %s", exc)
+    # 8. Send Telegram Notification (Only if all enabled platforms succeeded)
+    all_enabled_success = all(
+        _extract_status(it_state.get(p)) == STATUS_SUCCESS
+        for p in PLATFORMS
+        if _is_platform_enabled(p)
+    )
+    if all_enabled_success:
+        try:
+            # Format time metrics
+            duration = end_time - start_time
+            mins = int(duration // 60)
+            secs = int(duration % 60)
+            if mins > 0:
+                duration_formatted = f"{mins} mins {secs} secs"
+            else:
+                duration_formatted = f"{secs} secs"
+
+            local_upload_time = datetime.now(_tz).strftime("%Y-%m-%d %H:%M (Egypt Time)")
+
+            send_telegram_report(target_folder, local_upload_time, duration_formatted)
+        except Exception as exc:
+            logger.warning("Could not dispatch Telegram status report: %s", exc)
+    else:
+        logger.info(
+            "[%s] Skipping Telegram notification since not all enabled platforms are successful.",
+            target_folder,
+        )
 
 
 if __name__ == "__main__":

@@ -22,7 +22,7 @@ ENABLE_TIKTOK    = True
 # ─── Telegram Notifier ───────────────────────────────────────────────────────
 # True  → send notification to Telegram Bot if bot credentials exist in .env.
 # False → disabled.
-ENABLE_TELEGRAM  = False
+ENABLE_TELEGRAM  = True
 
 # ─── Meta Business Suite Composer URL ────────────────────────────────────────
 # The pipeline navigates here automatically when no Meta Business Suite tab is
