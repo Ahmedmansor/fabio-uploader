@@ -37,7 +37,7 @@ from config import (
     DISCLAIMERS,
     GEMINI_MODEL,
     GEMINI_RPM_SLEEP,
-    HASHTAGS,
+    CORE_BRAND_HASHTAGS,
     LANGUAGE_CONTEXTS,
     LANGUAGES,
     VIDEO_TAGS,
@@ -159,73 +159,92 @@ def _save_cache(folder_path: Path, cache: dict) -> None:
 
 
 def _is_cache_valid(entry: object) -> bool:
-    """Return True only if a cache entry contains all three required keys."""
+    """Return True only if a cache entry matches the new multi-platform schema."""
     return (
         isinstance(entry, dict)
-        and all(k in entry for k in ("title", "description", "tags"))
+        and "youtube" in entry
+        and "meta_reels" in entry
+        and "tiktok" in entry
+        and isinstance(entry["youtube"], dict)
+        and isinstance(entry["meta_reels"], dict)
+        and isinstance(entry["tiktok"], dict)
+        and all(k in entry["youtube"] for k in ("title", "description", "tags"))
+        and all(k in entry["meta_reels"] for k in ("caption", "hashtags"))
+        and all(k in entry["tiktok"] for k in ("caption", "hashtags"))
     )
 
 
 # ─── Prompt Builder ───────────────────────────────────────────────────────────
 
 def _build_prompt(script_text: str, lang: str) -> str:
-    """Build the full Gemini prompt for the given language."""
+    """Build the full Gemini prompt for the given language using the new multi-platform schema."""
     import datetime
     current_year = datetime.datetime.now().year
     ctx = LANGUAGE_CONTEXTS[lang]
+    disclaimer = DISCLAIMERS.get(lang, "")
+    brand_tags = CORE_BRAND_HASHTAGS.get(lang, [])
+    brand_tags_str = ", ".join(brand_tags)
+    
     return f"""You are a passionate Italian travel content creator helping Fabio,
-an Italian tour guide working in Egypt, to create viral YouTube Shorts content
-that inspires Italian tourists to book a trip to Egypt or Sharm el-Sheikh.
+an Italian tour guide working in Egypt, to create viral short-form video content
+tailored for YouTube Shorts, Meta Reels (Facebook & Instagram), and TikTok.
+Your goal is to inspire Italian tourists to book a trip to Egypt or Sharm el-Sheikh.
 
 CURRENT YEAR: {current_year}
-- Keep in mind that the current year is {current_year}. Do NOT reference outdated years (like 2024 or 2025) in any generated text.
+- Keep in mind that the current year is {current_year}. Do NOT reference outdated years (like 2024 or 2025).
 
 CHANNEL NOTE: {ctx['channel_note']}
 TARGET AUDIENCE: {ctx['audience']}
 REQUIRED TONE: {ctx['tone']}
 
-SOURCE SCRIPT (the narration/dialogue for this Short — may be in any language):
+SOURCE SCRIPT:
 ---
 {script_text.strip()}
 ---
 
-LANGUAGE & TONE INSTRUCTIONS:
-- Write ENTIRELY in {ctx['language_name']} ({ctx['language_native']}).
-- Use warm, natural, everyday Italian — NOT formal or corporate language.
-- Make the viewer feel they are missing out on something magical if they don't book.
-- Focus on beauty, adventure, value, and the unique experience Egypt offers.
+INSTRUCTIONS:
+1. Write ENTIRELY in {ctx['language_name']} ({ctx['language_native']}).
+2. Use warm, natural, everyday Italian — NOT formal or corporate language.
+3. Tailor the title, caption, and hashtags specifically to each platform's distinct style and limits.
 
-SMART TITLE LOGIC:
-1. Read the script carefully. Find the most emotionally compelling or curiosity-inducing
-   moment — the thing that would make an Italian scroll STOP and watch.
-2. Build your title around that moment. It can be a question, a bold statement,
-   or a surprising reveal (e.g. "Non crederai a quello che ho trovato a Sharm!" or
-   "Ecco perché l'Egitto è il posto più bello del mondo").
-3. MAXIMUM 60 characters (not counting the ' #Shorts' suffix).
+SCHEMA RULES:
+You must output a JSON object containing a single root key matching the language code "{lang}".
+Inside it, there must be three objects: "youtube", "meta_reels", and "tiktok".
 
-OUTPUT RULES:
+For "youtube" (YouTube Shorts):
+- "title": A curiosity-driven, high-click title strictly under 50 characters. Do NOT write '#shorts' or '#Shorts' (the backend will automatically append this).
+- "description": A detailed SEO-friendly description starting with a hook sentence, followed by 2-4 lines summarizing the video, then this exact disclaimer appended at the end:
+  "{disclaimer}"
+- "tags": An array of relevant tags/keywords for the YouTube backend (do NOT include '#' prefix).
 
-TITLE:
-- Write in Italian.
-- MAXIMUM 60 characters (not counting ' #Shorts').
-- MUST end with the exact string ' #Shorts' (one space before the hash).
-- Must be dramatic, curiosity-driven, and click-optimised for Shorts.
-- Do NOT start with "Video", "Guarda", or "Ep". No quotation marks.
+For "meta_reels" (Meta Reels - Shared Facebook & Instagram Composer):
+- "caption": A visually appealing, clean, and highly aesthetic caption optimized for Instagram layout (use clear line breaks/paragraphs and rich emojis) but limited in hashtags to prevent Facebook spam flags. Do NOT include any titles or markdown headers.
+- "hashtags": An array containing exactly 1 to 2 dynamic, hyper-relevant hashtags, PLUS the 2 core brand hashtags: {brand_tags_str} (yielding exactly 3 to 4 hashtags in total). All hashtags must start with '#' symbol.
 
-DESCRIPTION:
-- Write in Italian.
-- MUST start with a compelling hook sentence.
-- Then 2–4 lines summarising the beauty / experience shown in the video.
-- End with a clear call-to-action (e.g. "Scrivici nei commenti per info sui tour!").
-- Do NOT include any hashtags in the description body — they will be added automatically.
-- 4–6 lines maximum total.
+For "tiktok" (TikTok):
+- "caption": A short, high-energy, punchy 1-2 sentence caption (Hook + strong Call to Action to watch or follow). SNAPPY and completely informal. Do NOT include markdown formatting or titles.
+- "hashtags": An array containing exactly 2 to 4 dynamic, hyper-relevant hashtags (including TikTok-centric discovery tags like #fyp or #perte), PLUS the 2 core brand hashtags: {brand_tags_str} (yielding exactly 4 to 6 hashtags in total). All hashtags must start with '#' symbol.
 
-CRITICAL: Respond with ONLY a valid JSON object — no markdown fences, no prose,
-no explanation outside the JSON. Exact schema required:
+OUTPUT SCHEMA FORMAT:
 {{
-  "title": "string",
-  "description": "string"
-}}"""
+  "{lang}": {{
+    "youtube": {{
+      "title": "Base title strictly under 50 chars",
+      "description": "SEO description + disclaimer",
+      "tags": ["tag1", "tag2"]
+    }},
+    "meta_reels": {{
+      "caption": "Aesthetic caption with line breaks and emojis.",
+      "hashtags": ["#DynamicTag", "#FabioEgypt", "#ViaggioInEgitto"]
+    }},
+    "tiktok": {{
+      "caption": "Snappy high-energy TikTok caption + CTA.",
+      "hashtags": ["#fyp", "#perte", "#DynamicTag", "#FabioEgypt", "#ViaggioInEgitto"]
+    }}
+  }}
+}}
+
+CRITICAL: Respond with ONLY a valid JSON object — no markdown fences, no prose, no explanations outside the JSON."""
 
 
 # ─── Gemini Client ────────────────────────────────────────────────────────────
@@ -245,7 +264,7 @@ def _init_client() -> genai.Client:
 
 def _call_gemini(client: genai.Client, prompt: str, lang: str) -> dict | None:
     """
-    Execute one Gemini API call and return the validated metadata dict.
+    Execute one Gemini API call and return the validated multi-platform metadata dict.
     Returns None on any failure after all retries are exhausted.
 
     Includes retry logic for transient server errors (503, 429, UNAVAILABLE).
@@ -273,30 +292,90 @@ def _call_gemini(client: genai.Client, prompt: str, lang: str) -> dict | None:
 
             data = json.loads(raw)
 
+            # Get inner data from root key lang (e.g. "IT") if present
+            if lang in data:
+                inner_data = data[lang]
+            else:
+                inner_data = data
+
             # Validate required keys
-            for key in ("title", "description"):
-                if key not in data:
+            for key in ("youtube", "meta_reels", "tiktok"):
+                if key not in inner_data:
                     raise ValueError(f"Missing key '{key}' in Gemini JSON response.")
 
-            # Enforce #Shorts at end of title
-            title = data["title"].rstrip()
-            if not title.endswith("#Shorts"):
-                title = title.rstrip() + " #Shorts"
-            data["title"] = title
+            yt_data = inner_data["youtube"]
+            meta_data = inner_data["meta_reels"]
+            tt_data = inner_data["tiktok"]
 
-            # Clean description and inject disclaimer + hashtags
-            desc = data["description"].strip()
-            desc = desc.replace("#Shorts", "").replace("#shorts", "").strip()
+            # Validate inner structures
+            for key in ("title", "description", "tags"):
+                if key not in yt_data:
+                    raise ValueError(f"Missing YouTube key '{key}' in Gemini response.")
 
+            for plat_name, plat_data in [("meta_reels", meta_data), ("tiktok", tt_data)]:
+                for key in ("caption", "hashtags"):
+                    if key not in plat_data:
+                        raise ValueError(f"Missing {plat_name} key '{key}' in Gemini response.")
+
+            # Clean YouTube title: remove quotes, clean whitespace, and automatically append ' #shorts'
+            yt_title = yt_data["title"].strip().strip('"').strip("'")
+            yt_title = yt_title.replace("#Shorts", "").replace("#shorts", "").strip()
+            yt_title = f"{yt_title} #shorts"
+            yt_data["title"] = yt_title
+
+            # Clean YouTube description and append disclaimer
+            yt_desc = yt_data["description"].strip()
             disclaimer = DISCLAIMERS.get(lang, "")
-            hashtags   = HASHTAGS.get(lang, "")
-            data["description"] = f"{desc}\n\n{disclaimer}\n\n{hashtags}"
+            if disclaimer and disclaimer not in yt_desc:
+                yt_desc = f"{yt_desc}\n\n{disclaimer}"
+            yt_data["description"] = yt_desc
 
-            # Inject static SEO tags
-            data["tags"] = VIDEO_TAGS.get(lang, [])
+            # Enforce YouTube tags (backend tags: no '#' prefix)
+            yt_tags = yt_data.get("tags", [])
+            if not isinstance(yt_tags, list):
+                yt_tags = []
+            yt_tags = [t.replace("#", "").strip() for t in yt_tags if t.strip()]
+            static_tags = VIDEO_TAGS.get(lang, [])
+            for st in static_tags:
+                if st not in yt_tags:
+                    yt_tags.append(st)
+            yt_data["tags"] = yt_tags
 
-            logger.info("[%s] ✓ Metadata generated — Title: %s", lang, data["title"])
-            return data
+            # Clean and enrich meta_reels
+            meta_caption = meta_data["caption"].strip().strip('"').strip("'")
+            meta_data["caption"] = meta_caption
+            meta_hashtags = meta_data.get("hashtags", [])
+            if not isinstance(meta_hashtags, list):
+                meta_hashtags = []
+            meta_hashtags = [h if h.startswith("#") else f"#{h}" for h in meta_hashtags if h.strip()]
+            
+            brand_tags = CORE_BRAND_HASHTAGS.get(lang, [])
+            for bt in brand_tags:
+                if bt not in meta_hashtags:
+                    meta_hashtags.append(bt)
+            meta_data["hashtags"] = meta_hashtags
+
+            # Clean and enrich tiktok
+            tt_caption = tt_data["caption"].strip().strip('"').strip("'")
+            tt_data["caption"] = tt_caption
+            tt_hashtags = tt_data.get("hashtags", [])
+            if not isinstance(tt_hashtags, list):
+                tt_hashtags = []
+            tt_hashtags = [h if h.startswith("#") else f"#{h}" for h in tt_hashtags if h.strip()]
+            
+            for bt in brand_tags:
+                if bt not in tt_hashtags:
+                    tt_hashtags.append(bt)
+            tt_data["hashtags"] = tt_hashtags
+
+            final_data = {
+                "youtube": yt_data,
+                "meta_reels": meta_data,
+                "tiktok": tt_data,
+            }
+
+            logger.info("[%s] ✓ Multi-platform metadata generated successfully.", lang)
+            return final_data
 
         except json.JSONDecodeError as exc:
             logger.error("[%s] Gemini returned invalid JSON: %s", lang, exc)

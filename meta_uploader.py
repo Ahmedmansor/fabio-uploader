@@ -678,9 +678,12 @@ class MetaUploader(BaseUploader):
             self.logger.error("Video file not found: %s", video_path)
             return False
 
-        description = metadata.get("description", "")
+        meta_meta = metadata.get("meta_reels") or metadata.get("short_form", {})
+        caption = meta_meta.get("caption", "").strip()
+        hashtags = " ".join(meta_meta.get("hashtags", []))
+        description = f"{caption}\n\n{hashtags}".strip() if hashtags else caption
         if not description:
-            self.logger.warning("No description provided — uploading without caption.")
+            self.logger.warning("No short_form description provided — uploading without caption.")
 
         self.logger.info(
             "=== Starting Meta upload | lang=%s | file=%s | scheduled=%s ===",

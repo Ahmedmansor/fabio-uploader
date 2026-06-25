@@ -1,5 +1,5 @@
 {
-  "2026-06-23": {
+  "2026-06-25": {
     "IT": {
       "youtube": {
         "count": 1,
@@ -16,27 +16,6 @@
       "instagram": {
         "count": 1,
         "scheduled_times": [
-          "21:00"
-        ]
-      }
-    }
-  },
-  "2026-06-24": {
-    "IT": {
-      "tiktok": {
-        "count": 1,
-        "scheduled_times": [
-          "21:00"
-        ]
-      }
-    }
-  },
-  "2026-06-25": {
-    "IT": {
-      "tiktok": {
-        "count": 1,
-        "scheduled_times": [
-          "21:00",
           "21:00"
         ]
       }

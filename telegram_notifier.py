@@ -131,11 +131,27 @@ def send_telegram_report(
         platform_lines.append(f"  Scheduled: `{scheduled_info}`")
         platform_lines.append("")
 
-    # 4. Format Premium Markdown message
+    # 4. Find project directory and load YouTube Title from metadata.json
+    project_dir = UPLOAD_QUEUE_DIR / folder_name
+    if not project_dir.exists():
+        project_dir = UPLOADED_DONE_DIR / folder_name
+
+    yt_title = "N/A"
+    meta_path = project_dir / "metadata.json"
+    if meta_path.exists():
+        try:
+            with open(meta_path, "r", encoding="utf-8") as f:
+                metadata_content = json.load(f)
+                yt_title = metadata_content.get(lang, {}).get("youtube", {}).get("title", "N/A")
+        except Exception as exc:
+            logger.warning("[Telegram] Could not load title from metadata.json: %s", exc)
+
+    # 5. Format Premium Markdown message
     lines = [
         "✨ *FABIO UPLOADER REPORT* ✨",
         "==================================",
         f"📂 *Folder:* `{folder_name}`",
+        f"🎬 *Title:* *{yt_title}*",
         f"🌐 *Language:* `{lang}`",
         "",
         "⏱️ *Upload Metrics:*",
@@ -151,13 +167,10 @@ def send_telegram_report(
 
     message = "\n".join(lines)
 
-    # 5. Find Thumbnail.jpg
-    project_dir = UPLOAD_QUEUE_DIR / folder_name
-    if not project_dir.exists():
-        project_dir = UPLOADED_DONE_DIR / folder_name
+    # 6. Find Thumbnail.jpg
     thumbnail_path = project_dir / "Thumbnail.jpg"
 
-    # 6. Delivery: Send photo first, fallback to text message
+    # 7. Delivery: Send photo first, fallback to text message
     sent_successfully = False
 
     if thumbnail_path.exists():

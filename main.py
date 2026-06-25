@@ -413,12 +413,27 @@ def _print_metadata_preview(folder: str, meta: dict | None) -> None:
     if meta is None:
         print("  [WARNING] Metadata generation FAILED.")
     else:
-        print(f"  TITLE       : {meta['title']}")
+        yt = meta.get("youtube", {})
+        meta_reels = meta.get("meta_reels") or meta.get("short_form", {})
+        tiktok = meta.get("tiktok") or meta.get("short_form", {})
+        
+        print("  --- YOUTUBE SHORTS ---")
+        print(f"  TITLE       : {yt.get('title', 'N/A')}")
         print("  DESCRIPTION :")
-        for line in meta["description"].splitlines():
+        for line in yt.get("description", "").splitlines():
             print(f"                {line}")
-        tags_str = ", ".join(meta.get("tags", []))
+        tags_str = ", ".join(yt.get("tags", []))
         print(f"  TAGS        : {tags_str}")
+        
+        print("\n  --- META REELS (FB & IG) ---")
+        print(f"  CAPTION     : {meta_reels.get('caption', 'N/A')}")
+        meta_hash = " ".join(meta_reels.get("hashtags", []))
+        print(f"  HASHTAGS    : {meta_hash}")
+        
+        print("\n  --- TIKTOK ---")
+        print(f"  CAPTION     : {tiktok.get('caption', 'N/A')}")
+        tiktok_hash = " ".join(tiktok.get("hashtags", []))
+        print(f"  HASHTAGS    : {tiktok_hash}")
     print(f"\n{'=' * 64}\n")
 
 

@@ -345,18 +345,19 @@ def _set_video_file(page: Page, video_path: Path) -> None:
 
 
 def _fill_details(page: Page, metadata: dict) -> None:
-    """Fill the title, description, and tags fields."""
+    """Fill the title, description, and tags fields using the new YouTube metadata schema."""
+    yt_meta = metadata.get("youtube", {})
 
     # Title
     logger.info("Typing title…")
-    _clear_and_type(page, SEL.TITLE_FIELD, metadata["title"])
+    _clear_and_type(page, SEL.TITLE_FIELD, yt_meta.get("title", ""))
     human_sleep(0.5, 1.2)
     page.keyboard.press("Escape")   # dismiss any hashtag dropdown
     human_sleep(0.3, 0.5)
 
     # Description
     logger.info("Pasting description…")
-    _paste_text(page, SEL.DESC_FIELD, metadata["description"])
+    _paste_text(page, SEL.DESC_FIELD, yt_meta.get("description", ""))
     human_sleep(0.6, 1.4)
     page.keyboard.press("Escape")
     human_sleep(0.2, 0.5)
@@ -394,7 +395,7 @@ def _fill_details(page: Page, metadata: dict) -> None:
 
     if tags_sel:
         page.click(tags_sel)
-        for tag in metadata.get("tags", []):
+        for tag in yt_meta.get("tags", []):
             tag = tag.strip()
             if not tag:
                 continue
