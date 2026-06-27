@@ -47,8 +47,8 @@ CHANNEL_HANDLE = "@FabioEgyptItaly"
 
 # ─── Browser Selection Flags ──────────────────────────────────────────────────
 # Control which browser automation software is active
-USE_BITBROWSER = True
-USE_ADSPOWER   = False
+USE_BITBROWSER = False
+USE_ADSPOWER   = True
 
 # ─── AdsPower Local API ────────────────────────────────────────────────────────
 # AdsPower must be running on the local machine for this to work.
@@ -113,13 +113,9 @@ LANGUAGE_CONTEXTS: dict[str, dict] = {
     # "EN": { ... },
 }
 
-# Static hashtags appended to every description, per language
-HASHTAGS: dict[str, str] = {
-    "IT": (
-        "#Shorts #Egitto #SharmElSheikh #ViaggioInEgitto #TourInEgitto "
-        "#EgittoTurismo #VisitEgypt #MarRosso #VacanzaEgitto #FabioEgypt "
-        "#GuidaTuristica #EgittoMeraviglioso #TravelItaly #EsploraEgitto"
-    ),
+# Core brand hashtags to be mixed with AI generated dynamic ones
+CORE_BRAND_HASHTAGS: dict[str, list[str]] = {
+    "IT": ["#FabioEgypt", "#ViaggioInEgitto"],
 }
 
 # Static disclaimer appended to every description, per language

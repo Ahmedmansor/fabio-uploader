@@ -37,7 +37,7 @@ from config import (
 )
 from pipeline_config import TIKTOK_UPLOAD_URL
 from uploader_base import BaseUploader
-from utils import human_sleep
+from utils import human_sleep, set_file_via_cdp
 
 logger = logging.getLogger(__name__)
 
@@ -116,12 +116,12 @@ def _wait_for_composer_ready(page: Page) -> None:
         page.get_by_role("button", name="Replace"),
     ]
     start_time = time.time()
-    while time.time() - start_time < 15:
+    while time.time() - start_time < 30:
         for lm in landmarks:
             if lm.count() > 0 and lm.first.is_visible():
                 return
         time.sleep(0.5)
-    logger.warning("[TikTok] Warning: No composer landmarks became visible within 15 seconds.")
+    logger.warning("[TikTok] Warning: No composer landmarks became visible within 30 seconds.")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -152,7 +152,7 @@ def _step_upload_video(page: Page, video_path: Path) -> bool:
     with page.expect_file_chooser(timeout=20_000) as fc_info:
         select_btn.first.click()
 
-    fc_info.value.set_files(str(video_path))
+    set_file_via_cdp(page, fc_info.value.element, video_path)
     logger.info("[TikTok] Step 1 ✓ Video file submitted to file chooser. Waiting for upload…")
     return True
 
@@ -235,11 +235,12 @@ def _step_fill_description(page: Page, description_text: str, video_path: Path) 
 
 
 def _step_upload_thumbnail(page: Page, thumbnail_path: Path) -> None:
-    """Step 4 — Upload a custom cover image."""
+    """Step 4 — Upload a custom cover image with dual-path UI detection (Variant A / Variant B)."""
     logger.info("[TikTok] Step 4 → Uploading cover: %s", thumbnail_path.name)
     if not thumbnail_path.exists():
         raise FileNotFoundError(f"Thumbnail file not found: {thumbnail_path}")
 
+    # Ensure the "Cover" tab or section is selected
     cover_tab = page.get_by_text("Cover", exact=True)
     if cover_tab.count() > 0 and cover_tab.first.is_visible():
         try:
@@ -253,6 +254,7 @@ def _step_upload_thumbnail(page: Page, thumbnail_path: Path) -> None:
             except Exception:
                 pass
 
+    # Look for "Edit cover" button
     edit_cover = page.get_by_text("Edit cover")
     if edit_cover.count() == 0 or not edit_cover.first.is_visible():
         logger.info("[TikTok] Step 4 → 'Edit cover' button not visible. Assuming cover already uploaded/customized.")
@@ -270,38 +272,133 @@ def _step_upload_thumbnail(page: Page, thumbnail_path: Path) -> None:
             pass
     _hs(1.0, 2.0)
 
-    upload_btn = page.get_by_role("button", name="Upload cover image")
-    if upload_btn.count() > 0 and upload_btn.first.is_visible():
-        with page.expect_file_chooser(timeout=20_000) as fc_info:
-            upload_btn.first.click()
-        fc_info.value.set_files(str(thumbnail_path))
-        logger.info("[TikTok] Cover file submitted.")
-        _hs(1.5, 3.0)
+    # ── Cover Editing State: Determine the UI Variant ────────────────────────
+    # UI Variant A (Modal): Has a "Confirm" button.
+    # UI Variant B (Full-Page): Has a "Save" button.
+    confirm_btn = page.get_by_role("button", name="Confirm")
+    save_btn = page.get_by_role("button", name="Save")
 
-        save_btn = page.get_by_role("button", name="Save")
-        save_btn.wait_for(state="visible", timeout=10000)
-        
-        # Save button is located in a fixed-position top header inside the modal.
-        # Direct scrollIntoView might push it off-screen; click via JS evaluation for stability.
-        logger.info("[TikTok] Clicking Save button via JS click...")
-        try:
-            save_btn.first.evaluate("el => el.click()")
-        except Exception as exc:
-            logger.warning("[TikTok] JS click failed: %s. Trying standard forced click fallback...", exc)
-            save_btn.first.click(force=True)
+    logger.info("[TikTok] Waiting for cover editor to load…")
+    start_t = time.time()
+    variant = None
+    while time.time() - start_t < 15:
+        if confirm_btn.count() > 0 and confirm_btn.first.is_visible():
+            variant = "A"
+            break
+        if save_btn.count() > 0 and save_btn.first.is_visible():
+            variant = "B"
+            break
+        time.sleep(0.5)
 
-        # Wait for cover modal to close
-        save_btn.wait_for(state="hidden", timeout=10000)
-        logger.info("[TikTok] Step 4 ✓ Cover uploaded and saved.")
-        _hs(0.5, 1.0)
-    else:
-        logger.info("[TikTok] Cover upload button not found in modal. Clicking Cancel to close cover modal...")
+    if not variant:
+        # Fallback Cancel if we can't find editing controls
+        logger.warning("[TikTok] Could not detect cover editor UI variant. Attempting fallback cancel…")
         cancel_btn = page.get_by_role("button", name="Cancel")
         if cancel_btn.count() > 0 and cancel_btn.first.is_visible():
             cancel_btn.first.click(force=True)
         else:
             page.locator("text=Cancel").first.click(force=True)
+        return
+
+    logger.info("[TikTok] Detected Cover Editor UI Variant: %s", variant)
+
+    if variant == "A":
+        # UI Variant A (Modal Layout)
+        # 1. Click "Upload cover" tab
+        logger.info("[TikTok] Variant A: Clicking 'Upload cover' tab…")
+        upload_tab = page.get_by_text("Upload cover").first
+        _wait_visible(page, upload_tab)
+        upload_tab.click()
         _hs(0.5, 1.0)
+
+        # 2. Click "select a file" to trigger file chooser
+        logger.info("[TikTok] Variant A: Clicking 'select a file' and submitting cover file…")
+        select_file_btn = page.get_by_text("select a file").first
+        _wait_visible(page, select_file_btn)
+        
+        with page.expect_file_chooser(timeout=20_000) as fc_info:
+            select_file_btn.click()
+        set_file_via_cdp(page, fc_info.value.element, thumbnail_path)
+        _hs(1.5, 3.0)
+
+        # 3. Click "Confirm" (safely targeting the active/visible one or nth(1))
+        logger.info("[TikTok] Variant A: Clicking 'Confirm'…")
+        
+        # Let's locate all "Confirm" buttons
+        confirm_btn = page.get_by_role("button", name="Confirm")
+        _hs(1.0, 2.0)  # Wait a moment for modal button to fully stabilize
+        
+        confirm_clicked = False
+        
+        # Try .nth(1) first
+        if confirm_btn.count() > 1:
+            target_btn = confirm_btn.nth(1)
+            try:
+                _wait_visible(page, target_btn, timeout=5000)
+                try:
+                    target_btn.evaluate("el => el.click()")
+                except Exception:
+                    target_btn.click(force=True)
+                confirm_clicked = True
+                logger.info("[TikTok] Variant A: Clicked Confirm nth(1) via JS/Forced click.")
+            except Exception as exc:
+                logger.warning("[TikTok] Variant A: Failed to click Confirm nth(1): %s", exc)
+
+        if not confirm_clicked:
+            # Fallback to loop
+            for i in range(confirm_btn.count()):
+                btn = confirm_btn.nth(i)
+                if btn.is_visible() and btn.is_enabled():
+                    try:
+                        btn.click(force=True)
+                        confirm_clicked = True
+                        logger.info("[TikTok] Variant A: Clicked Confirm nth(%d) in fallback loop.", i)
+                        break
+                    except Exception:
+                        pass
+        
+        if not confirm_clicked:
+            # Last resort click
+            logger.info("[TikTok] Variant A: Clicking Confirm first as last resort…")
+            try:
+                confirm_btn.first.click(force=True)
+            except Exception as exc:
+                logger.error("[TikTok] Variant A: Last resort Confirm click failed: %s", exc)
+        _hs(1.0, 2.0)
+
+    else:
+        # UI Variant B (Full-Page Editor)
+        # 1. Click "Upload cover" button/icon
+        logger.info("[TikTok] Variant B: Clicking 'Upload cover' button…")
+        upload_btn = page.get_by_text("Upload cover").first
+        _wait_visible(page, upload_btn)
+
+        # Locate file input
+        file_input = page.locator("input[type='file']").first
+        try:
+            # If input is already attached, upload directly without clicking
+            file_input.wait_for(state="attached", timeout=3000)
+            set_file_via_cdp(page, file_input, thumbnail_path)
+            logger.info("[TikTok] Variant B: File submitted directly to input.")
+        except PlaywrightTimeout:
+            # Fallback: click and upload
+            logger.info("[TikTok] Variant B: Input not found immediately. Triggering file chooser…")
+            with page.expect_file_chooser(timeout=15000) as fc_info:
+                upload_btn.click()
+            set_file_via_cdp(page, fc_info.value.element, thumbnail_path)
+            logger.info("[TikTok] Variant B: File submitted via file chooser.")
+        _hs(1.5, 3.0)
+
+        # 2. Click "Save"
+        logger.info("[TikTok] Variant B: Clicking 'Save'…")
+        _wait_visible(page, save_btn.first)
+        try:
+            save_btn.first.evaluate("el => el.click()")
+        except Exception:
+            save_btn.first.click(force=True)
+        _hs(1.0, 2.0)
+
+    logger.info("[TikTok] Step 4 ✓ Cover uploaded and saved.")
 
 
 def _step_enable_scheduling(page: Page) -> None:
@@ -555,6 +652,10 @@ class TikTokUploader(BaseUploader):
 
                 if _step_final_confirm(page):
                     self.logger.info("=== TikTok upload complete for '%s' ===", video_path.name)
+                    try:
+                        page.close()
+                    except Exception:
+                        pass
                     return True
 
         except (RuntimeError, FileNotFoundError) as exc:

@@ -41,11 +41,12 @@ from adspower_utils import connect_playwright_to_browser, start_browser, stop_br
 from config import (
     NAV_TIMEOUT_MS,
     SELECTOR_TIMEOUT_MS,
+    UPLOAD_TIMEOUT_MS,
 )
 from pipeline_config import META_COMPOSER_URL
 
 from uploader_base import BaseUploader
-from utils import human_sleep
+from utils import human_sleep, set_file_via_cdp
 
 logger = logging.getLogger(__name__)
 
@@ -208,7 +209,7 @@ def _step_upload_video(page: Page, video_path: Path) -> bool:
     with page.expect_file_chooser(timeout=20_000) as fc_info:
         add_video_btn.click()
 
-    fc_info.value.set_files(str(video_path))
+    set_file_via_cdp(page, fc_info.value.element, video_path)
     logger.info("[Meta] Step 1 ✓ Video file submitted to file chooser.")
     return True
 
@@ -229,36 +230,45 @@ def _step_wait_for_upload_complete(page: Page, was_skipped: bool = False) -> Non
         if page.locator("video").count() > 0:
             logger.info("[Meta] Step 2 ✓ Video element is already present. Bypassing upload progress wait.")
             return
-        try:
-            pct_locator = page.get_by_text("100%")
-            pct_locator.wait_for(state="visible", timeout=3000)
-            logger.info("[Meta] Step 2 ✓ Video upload is already complete (100%% visible).")
-            return
-        except PlaywrightTimeout:
-            # If there's a video element and we wait a brief moment without seeing any % indicators, it's done
-            if page.locator("video").is_visible():
-                logger.info("[Meta] Step 2 ✓ Video preview is visible and upload is complete. Skipping...")
-                return
 
-    try:
-        pct_locator = page.get_by_text("100%")
-        pct_locator.wait_for(state="visible", timeout=_VIDEO_UPLOAD_TIMEOUT_MS)
-        logger.info("[Meta] Step 2 ✓ Video upload reached 100%%.")
-    except PlaywrightTimeout:
-        # Fallback: check if the 100% text appeared via inner text
-        logger.warning(
-            "[Meta] 100%% indicator did not become visible within timeout — "
-            "checking page content as fallback…"
-        )
-        content = page.content()
-        if "100%" not in content:
-            raise RuntimeError(
-                "Video upload did not reach 100%% within the allowed timeout "
-                f"({_VIDEO_UPLOAD_TIMEOUT_MS // 1000}s). "
-                "Check your internet connection and try again."
-            )
-        logger.info("[Meta] Step 2 ✓ 100%% found in page source — proceeding.")
-    _hs(1.0, 2.0)
+    start_time = time.time()
+    while time.time() - start_time < _VIDEO_UPLOAD_TIMEOUT_MS / 1000:
+        if _is_past_upload_screen(page):
+            logger.info("[Meta] Step 2 ✓ Advanced past upload screen. Upload is complete.")
+            return
+
+        try:
+            # Check for percentage text in visible elements
+            pct_loc = page.get_by_text(re.compile(r"\b\d+%\b"))
+            if pct_loc.count() > 0:
+                for el in pct_loc.all():
+                    try:
+                        if el.is_visible():
+                            text = el.inner_text().strip()
+                            match = re.search(r"(\d+)%", text)
+                            if match:
+                                pct_val = int(match.group(1))
+                                logger.info("[Meta] Video upload progress: %d%%", pct_val)
+                                if pct_val == 100:
+                                    logger.info("[Meta] Step 2 ✓ Video upload reached 100%%.")
+                                    _hs(1.0, 2.0)
+                                    return
+                                break
+                    except Exception:
+                        pass
+        except Exception as e:
+            logger.debug("Error checking percentage: %s", e)
+
+        # Fallback check: if no % text is visible but the video preview is rendered
+        if page.locator("video").count() > 0 and page.locator("video").first.is_visible():
+            logger.info("[Meta] Step 2 ✓ Video element/preview visible. Upload is complete.")
+            return
+
+        time.sleep(5)
+
+    raise RuntimeError(
+        f"Video upload did not complete within the allowed timeout ({_VIDEO_UPLOAD_TIMEOUT_MS // 1000}s)."
+    )
 
 
 def _step_fill_description(page: Page, description_text: str) -> None:
@@ -353,7 +363,7 @@ def _step_upload_thumbnail(page: Page, thumbnail_path: Path) -> None:
             # Click the "Upload image" link inside the popup that appears
             page.get_by_role("link", name="Upload image").click()
 
-        fc_info.value.set_files(str(thumbnail_path))
+        set_file_via_cdp(page, fc_info.value.element, thumbnail_path)
         logger.info("[Meta] Step 4 ✓ Thumbnail submitted.")
         _hs(1.0, 2.0)
 
@@ -739,6 +749,10 @@ class MetaUploader(BaseUploader):
                 self.logger.info(
                     "=== Meta upload complete for '%s' ===", video_path.name
                 )
+                try:
+                    page.close()
+                except Exception:
+                    pass
                 return True
 
         except (RuntimeError, FileNotFoundError) as exc:

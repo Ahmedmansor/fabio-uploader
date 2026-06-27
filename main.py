@@ -51,6 +51,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import sys
 import tempfile
 import time
@@ -119,6 +120,11 @@ STATUS_SKIPPED = "skipped by the user"
 RESUMABLE = {STATUS_PENDING, STATUS_LOADING, STATUS_ERROR}
 
 _tz = pytz.timezone(EGYPT_TIMEZONE)
+
+
+def _natural_sort_key(path: Path) -> list:
+    """Key for sorting paths naturally (e.g. project_5 before project_10)."""
+    return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', path.name)]
 
 
 # ─── Platform Flag Helpers ────────────────────────────────────────────────────
@@ -288,7 +294,7 @@ def _sync_state_with_queue(state: dict) -> dict:
         return state
 
     changed = False
-    for folder_path in sorted(UPLOAD_QUEUE_DIR.iterdir()):
+    for folder_path in sorted(UPLOAD_QUEUE_DIR.iterdir(), key=_natural_sort_key):
         if not folder_path.is_dir():
             continue
         name = folder_path.name
@@ -387,7 +393,7 @@ def _find_pending_folder(
     if not UPLOAD_QUEUE_DIR.exists():
         return None
 
-    for folder_path in sorted(UPLOAD_QUEUE_DIR.iterdir()):
+    for folder_path in sorted(UPLOAD_QUEUE_DIR.iterdir(), key=_natural_sort_key):
         if not folder_path.is_dir():
             continue
         name = folder_path.name
@@ -858,21 +864,24 @@ def main() -> None:
         if _is_platform_enabled(p)
     )
     if all_enabled_success:
-        try:
-            # Format time metrics
-            duration = end_time - start_time
-            mins = int(duration // 60)
-            secs = int(duration % 60)
-            if mins > 0:
-                duration_formatted = f"{mins} mins {secs} secs"
-            else:
-                duration_formatted = f"{secs} secs"
+        if not args.dry_run:
+            try:
+                # Format time metrics
+                duration = end_time - start_time
+                mins = int(duration // 60)
+                secs = int(duration % 60)
+                if mins > 0:
+                    duration_formatted = f"{mins} mins {secs} secs"
+                else:
+                    duration_formatted = f"{secs} secs"
 
-            local_upload_time = datetime.now(_tz).strftime("%Y-%m-%d %H:%M (Egypt Time)")
+                local_upload_time = datetime.now(_tz).strftime("%Y-%m-%d %H:%M (Egypt Time)")
 
-            send_telegram_report(target_folder, local_upload_time, duration_formatted)
-        except Exception as exc:
-            logger.warning("Could not dispatch Telegram status report: %s", exc)
+                send_telegram_report(target_folder, local_upload_time, duration_formatted)
+            except Exception as exc:
+                logger.warning("Could not dispatch Telegram status report: %s", exc)
+        else:
+            logger.info("[%s] Skipping Telegram notification since this is a dry-run.", target_folder)
     else:
         logger.info(
             "[%s] Skipping Telegram notification since not all enabled platforms are successful.",

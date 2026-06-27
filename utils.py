@@ -14,7 +14,7 @@ import time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from playwright.sync_api import Page
+from playwright.sync_api import Page, Locator
 
 from config import LOGS_DIR
 
@@ -170,3 +170,106 @@ def move_folder_to_done(folder_path: Path, done_dir: Path) -> None:
         )
     shutil.move(str(folder_path), str(destination))
     logger.info("Moved '%s' → '%s'", folder_path.name, destination)
+
+
+def set_file_via_cdp(page: Page, element, file_path: Path) -> None:
+    """
+    Set files on a file input (either a Locator or ElementHandle) using CDP,
+    bypassing Playwright's 50MB file transfer limit. Supports nested iframes
+    (both same-process and cross-process OOPIFs) and shadow DOMs by recursively 
+    traversing the resolved DOM tree in the appropriate CDP session.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    abs_path = file_path.resolve()
+    if not abs_path.exists():
+        raise FileNotFoundError(f"File to upload not found: {abs_path}")
+
+    logger.info("[CDP Upload] Injecting file directly via CDP: %s", abs_path.name)
+
+    # 1. Resolve to ElementHandle
+    from playwright.sync_api import Locator
+    if isinstance(element, Locator):
+        element.first.wait_for(state="attached")
+        element_handle = element.first.element_handle()
+    else:
+        element_handle = element
+
+    if not element_handle:
+        raise RuntimeError("Target element handle is None.")
+
+    # 2. Get owner frame
+    frame = element_handle.owner_frame()
+
+    # 3. Check if connected. If detached, temporarily attach it.
+    was_connected = element_handle.evaluate("el => el.isConnected")
+    if not was_connected:
+        logger.info("[CDP Upload] Element is detached. Temporarily attaching to DOM…")
+        element_handle.evaluate("el => { el.ownerDocument.body.appendChild(el); el.setAttribute('data-playwright-upload-target', 'true'); }")
+    else:
+        element_handle.evaluate("el => el.setAttribute('data-playwright-upload-target', 'true')")
+
+    try:
+        # 4. Open CDP session on the FRAME with fallback to PAGE
+        client = None
+        if frame:
+            try:
+                client = page.context.new_cdp_session(frame)
+                logger.debug("CDP session opened on frame.")
+            except Exception as exc:
+                logger.debug("Failed to open CDP session on frame, falling back to page: %s", exc)
+        
+        if not client:
+            client = page.context.new_cdp_session(page)
+            logger.debug("CDP session opened on page.")
+        
+        # 5. Retrieve entire document root recursively with pierce=True
+        doc = client.send("DOM.getDocument", {"depth": -1, "pierce": True})
+        
+        # 6. Recursively search for the target attribute in the node tree
+        def _find_node_in_tree(node: dict) -> int | None:
+            attrs = node.get("attributes", [])
+            for i in range(0, len(attrs), 2):
+                if attrs[i] == "data-playwright-upload-target" and attrs[i+1] == "true":
+                    return node["nodeId"]
+
+            for child in node.get("children", []):
+                res = _find_node_in_tree(child)
+                if res is not None:
+                    return res
+
+            if "contentDocument" in node:
+                res = _find_node_in_tree(node["contentDocument"])
+                if res is not None:
+                    return res
+
+            for shadow_root in node.get("shadowRoots", []):
+                res = _find_node_in_tree(shadow_root)
+                if res is not None:
+                    return res
+
+            return None
+
+        node_id = _find_node_in_tree(doc["root"])
+        
+        if not node_id:
+            raise RuntimeError("Failed to resolve target element nodeId via CDP search.")
+
+        # 7. Set the file path
+        client.send("DOM.setFileInputFiles", {
+            "files": [str(abs_path)],
+            "nodeId": node_id
+        })
+        logger.info("[CDP Upload] File successfully injected.")
+    finally:
+        # 8. Clean up: remove attribute and detach if it was originally detached
+        try:
+            if not was_connected:
+                element_handle.evaluate("el => { el.removeAttribute('data-playwright-upload-target'); el.remove(); }")
+                logger.info("[CDP Upload] Detached element from DOM.")
+            else:
+                element_handle.evaluate("el => el.removeAttribute('data-playwright-upload-target')")
+        except Exception:
+            pass
+

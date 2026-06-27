@@ -2,12 +2,12 @@
 meta_inspector.py — TEMPORARY selector-discovery tool.
 
 Purpose:
-    Attach Playwright's built-in Inspector to an *existing* BitBrowser session
+    Attach Playwright's built-in Inspector to an *existing* AdsPower session
     that already has a Meta Business Suite page open, WITHOUT refreshing it.
     Use the Inspector's picker to click UI elements and capture exact selectors.
 
 Usage:
-    1. Open BitBrowser manually and log in to business.facebook.com.
+    1. Open AdsPower manually and log in to business.facebook.com.
     2. Navigate to the page / state you want to inspect (e.g. the upload dialog).
     3. Run:   py meta_inspector.py
     4. The Playwright Inspector window will open.
@@ -23,12 +23,12 @@ import requests
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright
 
-# ── Load env so BITBROWSER_PROFILE_IT is available ───────────────────────────
+# ── Load env so ADSPOWER_PROFILE_IT is available ──────────────────────────────
 load_dotenv()
 
-# ── BitBrowser connection settings (mirrors config.py) ───────────────────────
-BITBROWSER_API_BASE = "http://127.0.0.1:54345/browser"
-PROFILE_ID          = os.getenv("BITBROWSER_PROFILE_IT", "7c74bf2e8a264e72aaaf29c2f6432e29")
+# ── AdsPower connection settings (mirrors config.py) ──────────────────────────
+ADSPOWER_API_BASE = "http://127.0.0.1:50325/api/v1/browser"
+PROFILE_ID          = os.getenv("ADSPOWER_PROFILE_IT", "k1dscqy8")
 TARGET_HOST         = "business.facebook.com"
 
 # Set PWDEBUG=1 so Playwright opens its Inspector window automatically
@@ -37,36 +37,47 @@ os.environ["PWDEBUG"] = "1"
 
 def _get_ws_endpoint(profile_id: str) -> str:
     """
-    Call BitBrowser's /browser/open API to get the CDP WebSocket URL
+    Call AdsPower's /start API to get the CDP WebSocket URL
     for the given profile.  The browser must already be running — the API
     returns the live ws:// endpoint even if it was opened earlier.
     """
-    url = f"{BITBROWSER_API_BASE}/open"
-    print(f"[inspector] Requesting CDP endpoint for profile: {profile_id}")
+    url = f"{ADSPOWER_API_BASE}/start"
+    print(f"[inspector] Requesting CDP endpoint for AdsPower profile: {profile_id}")
+    
+    # AdsPower authentication headers
+    api_key = os.getenv("ADSPOWER_API_KEY", "")
+    headers = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    params = {
+        "user_id": profile_id,
+        "open_tabs": 1,
+        "ip_tab": 0
+    }
+    
     try:
-        resp = requests.post(url, json={"id": profile_id}, timeout=15)
+        resp = requests.get(url, params=params, headers=headers, timeout=15)
         resp.raise_for_status()
     except requests.RequestException as exc:
         sys.exit(
-            f"[inspector] ✗ Could not reach BitBrowser Local API: {exc}\n"
-            "Make sure BitBrowser is running and the Local API is enabled on port 54345."
+            f"[inspector] ✗ Could not reach AdsPower Local API: {exc}\n"
+            "Make sure AdsPower is running and the Local API is enabled on port 50325."
         )
 
     payload = resp.json()
-    if not payload.get("success"):
-        sys.exit(f"[inspector] ✗ BitBrowser /open failed: {payload.get('msg')}")
+    if payload.get("code") != 0:
+        sys.exit(f"[inspector] ✗ AdsPower /start failed: {payload.get('msg')} (code: {payload.get('code')})")
 
-    data   = payload.get("data", {})
-    ws_url = data.get("ws") or data.get("wsUrl") or ""
+    data = payload.get("data", {})
+    ws_info = data.get("ws", {})
+    ws_url = ws_info.get("puppeteer") or ws_info.get("selenium")
 
     if not ws_url:
         sys.exit(
-            f"[inspector] ✗ No WebSocket URL in BitBrowser response.\n"
+            f"[inspector] ✗ No WebSocket CDP endpoint in AdsPower response.\n"
             f"Full payload: {payload}"
         )
-
-    if not ws_url.startswith("ws"):
-        ws_url = f"ws://{ws_url}"
 
     print(f"[inspector] ✓ CDP WebSocket endpoint: {ws_url}")
     return ws_url
@@ -89,7 +100,7 @@ def main() -> None:
     ws_endpoint = _get_ws_endpoint(PROFILE_ID)
 
     with sync_playwright() as pw:
-        print("[inspector] Attaching Playwright to running BitBrowser session…")
+        print("[inspector] Attaching Playwright to running AdsPower session…")
         browser = pw.chromium.connect_over_cdp(ws_endpoint)
         print(f"[inspector] Connected. Contexts: {len(browser.contexts)}")
 
@@ -100,7 +111,7 @@ def main() -> None:
         if target_page is None:
             print(
                 f"\n[inspector] ✗ No page containing '{TARGET_HOST}' was found.\n"
-                "  → Make sure the Meta Business Suite page is open in BitBrowser\n"
+                "  → Make sure the Meta Business Suite page is open in AdsPower\n"
                 "    before running this script.\n"
                 "  → Pages scanned above ↑"
             )
@@ -128,8 +139,8 @@ def main() -> None:
         # without navigating or changing any page state.
         target_page.pause()
 
-        print("[inspector] Inspector closed. Disconnecting from BitBrowser…")
-        # Do NOT call browser.close() — that would kill the live BitBrowser tab.
+        print("[inspector] Inspector closed. Disconnecting from AdsPower…")
+        # Do NOT call browser.close() — that would kill the live AdsPower tab.
 
 
 if __name__ == "__main__":

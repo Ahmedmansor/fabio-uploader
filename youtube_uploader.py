@@ -40,7 +40,7 @@ from config import (
 )
 from scheduler import format_scheduled_time_for_yt
 from uploader_base import BaseUploader
-from utils import human_sleep, slow_type
+from utils import human_sleep, slow_type, set_file_via_cdp
 
 logger = logging.getLogger(__name__)
 
@@ -333,7 +333,7 @@ def _set_video_file(page: Page, video_path: Path) -> None:
         page.click(SEL.SELECT_FILES_BTN)
 
     file_chooser = fc_info.value
-    file_chooser.set_files(str(video_path))
+    set_file_via_cdp(page, file_chooser.element, video_path)
     human_sleep(1.0, 2.0)
 
     # Quickly check for upload progress bar to verify upload started
@@ -663,8 +663,8 @@ class YouTubeUploader(BaseUploader):
                         "Aborting upload to prevent posting to the wrong channel."
                     )
 
-                # 6. Re-navigate to Studio after possible channel switch
-                _navigate_to_studio(page)
+                # 6. Re-navigate to Studio after possible channel switch (disabled to prevent double reload)
+                # _navigate_to_studio(page)
 
                 # 7. Open upload dialog, select file
                 _open_upload_dialog(page)
@@ -684,6 +684,10 @@ class YouTubeUploader(BaseUploader):
                 self.logger.info(
                     "=== Upload complete for '%s' ===", video_path.name
                 )
+                try:
+                    page.close()
+                except Exception:
+                    pass
                 # Playwright will disconnect cleanly when exiting the with block
                 return True
 
