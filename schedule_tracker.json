@@ -250,5 +250,145 @@
         ]
       }
     }
+  },
+  "2026-07-04": {
+    "IT": {
+      "youtube": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      },
+      "facebook": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      },
+      "instagram": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      },
+      "tiktok": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      }
+    }
+  },
+  "2026-07-05": {
+    "IT": {
+      "youtube": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      },
+      "facebook": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      },
+      "instagram": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      },
+      "tiktok": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      }
+    }
+  },
+  "2026-07-06": {
+    "IT": {
+      "youtube": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      },
+      "facebook": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      },
+      "instagram": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      },
+      "tiktok": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      }
+    }
+  },
+  "2026-07-07": {
+    "IT": {
+      "youtube": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      },
+      "facebook": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      },
+      "instagram": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      },
+      "tiktok": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      }
+    }
+  },
+  "2026-07-08": {
+    "IT": {
+      "youtube": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      },
+      "facebook": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      },
+      "instagram": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      },
+      "tiktok": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      }
+    }
   }
 }

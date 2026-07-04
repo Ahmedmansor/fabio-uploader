@@ -320,26 +320,178 @@
   "project_10": {
     "IT": {
       "youtube": {
-        "status": "loading",
-        "attempts_count": 1,
+        "status": "success",
+        "attempts_count": 6,
         "attempts_log": [
-          "2026-06-27 16:36"
+          "2026-06-27 16:36",
+          "2026-07-04 12:51",
+          "2026-07-04 12:51",
+          "2026-07-04 12:52",
+          "2026-07-04 12:52",
+          "2026-07-04 13:01"
         ]
       },
       "facebook": {
-        "status": "pending",
-        "attempts_count": 0,
-        "attempts_log": []
+        "status": "success",
+        "attempts_count": 5,
+        "attempts_log": [
+          "2026-07-04 12:51",
+          "2026-07-04 12:52",
+          "2026-07-04 12:52",
+          "2026-07-04 12:53",
+          "2026-07-04 13:04"
+        ]
       },
       "instagram": {
-        "status": "pending",
-        "attempts_count": 0,
-        "attempts_log": []
+        "status": "success",
+        "attempts_count": 5,
+        "attempts_log": [
+          "2026-07-04 12:51",
+          "2026-07-04 12:52",
+          "2026-07-04 12:52",
+          "2026-07-04 12:53",
+          "2026-07-04 13:04"
+        ]
       },
       "tiktok": {
-        "status": "pending",
-        "attempts_count": 0,
-        "attempts_log": []
+        "status": "success",
+        "attempts_count": 4,
+        "attempts_log": [
+          "2026-07-04 12:52",
+          "2026-07-04 12:53",
+          "2026-07-04 12:53",
+          "2026-07-04 13:06"
+        ]
+      }
+    }
+  },
+  "project_11": {
+    "IT": {
+      "youtube": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-04 13:09"
+        ]
+      },
+      "facebook": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-04 13:12"
+        ]
+      },
+      "instagram": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-04 13:12"
+        ]
+      },
+      "tiktok": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-04 13:14"
+        ]
+      }
+    }
+  },
+  "project_12": {
+    "IT": {
+      "youtube": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-04 13:19"
+        ]
+      },
+      "facebook": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-04 13:24"
+        ]
+      },
+      "instagram": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-04 13:24"
+        ]
+      },
+      "tiktok": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-04 13:30"
+        ]
+      }
+    }
+  },
+  "project_13": {
+    "IT": {
+      "youtube": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-04 13:41"
+        ]
+      },
+      "facebook": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-04 13:46"
+        ]
+      },
+      "instagram": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-04 13:46"
+        ]
+      },
+      "tiktok": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-04 13:49"
+        ]
+      }
+    }
+  },
+  "project_14": {
+    "IT": {
+      "youtube": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-04 13:54"
+        ]
+      },
+      "facebook": {
+        "status": "success",
+        "attempts_count": 2,
+        "attempts_log": [
+          "2026-07-04 14:00",
+          "2026-07-04 14:06"
+        ]
+      },
+      "instagram": {
+        "status": "success",
+        "attempts_count": 2,
+        "attempts_log": [
+          "2026-07-04 14:00",
+          "2026-07-04 14:06"
+        ]
+      },
+      "tiktok": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-04 14:07"
+        ]
       }
     }
   }
