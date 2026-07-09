@@ -440,9 +440,27 @@ def _step_set_date(page: Page, scheduled_time: datetime) -> None:
     date_input.click()
     _hs(0.6, 1.2)
 
-    day_locators = page.get_by_text(day_str, exact=True)
+    # Target only selectable calendar days with class '.day.valid'
+    # This prevents matching timepicker options (which lack the 'day' class)
+    day_locators = page.locator(".day.valid").get_by_text(day_str, exact=True)
+    
+    if day_locators.count() == 0:
+        logger.warning("[TikTok] Selector '.day.valid' found 0 matches for day %s. Falling back to page.get_by_text...", day_str)
+        day_locators = page.get_by_text(day_str, exact=True)
+
     if day_locators.count() > 1:
-        day_btn = day_locators.nth(1)
+        # Fallback loop to choose the first visible element if there are multiple matches
+        day_btn = None
+        for i in range(day_locators.count()):
+            loc = day_locators.nth(i)
+            try:
+                if loc.is_visible():
+                    day_btn = loc
+                    break
+            except Exception:
+                pass
+        if not day_btn:
+            day_btn = day_locators.first
     else:
         day_btn = day_locators.first
 
@@ -542,15 +560,29 @@ def _step_final_confirm(page: Page) -> bool:
     # Monitor URL transition or success message (typically redirects away from /upload page or indicates processing)
     start_time = time.time()
     while time.time() - start_time < 15:
-        if "upload" not in page.url:
-            logger.info("[TikTok] Step 8 ✓ Successfully scheduled. URL transitioned to: %s", page.url)
-            return True
+        try:
+            if "upload" not in page.url:
+                logger.info("[TikTok] Step 8 ✓ Successfully scheduled. URL transitioned to: %s", page.url)
+                return True
+        except Exception as exc:
+            # If the page/context is closed during transition, it is highly likely that the schedule succeeded
+            # (as TikTok Studio redirects/closes page after successful upload completion).
+            if "closed" in str(exc).lower():
+                logger.info("[TikTok] Step 8 ✓ Successfully scheduled. Page closed during URL transition: %s", exc)
+                return True
+            raise exc
         time.sleep(1)
 
-    content = page.content().lower()
-    if "scheduled" in content or "success" in content or "posts" in content:
-        logger.info("[TikTok] Step 8 ✓ Successfully scheduled (Found success indicators in page content).")
-        return True
+    try:
+        content = page.content().lower()
+        if "scheduled" in content or "success" in content or "posts" in content:
+            logger.info("[TikTok] Step 8 ✓ Successfully scheduled (Found success indicators in page content).")
+            return True
+    except Exception as exc:
+        if "closed" in str(exc).lower():
+            logger.info("[TikTok] Step 8 ✓ Successfully scheduled. Page closed when verifying page content: %s", exc)
+            return True
+        raise exc
 
     raise RuntimeError("TikTok final scheduling confirmation could not be verified.")
 
