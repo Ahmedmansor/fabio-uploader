@@ -806,96 +806,394 @@
   "project_24": {
     "IT": {
       "youtube": {
-        "status": "pending",
-        "attempts_count": 0,
-        "attempts_log": []
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-18 19:05"
+        ]
       },
       "facebook": {
-        "status": "pending",
-        "attempts_count": 0,
-        "attempts_log": []
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-18 19:08"
+        ]
       },
       "instagram": {
-        "status": "pending",
-        "attempts_count": 0,
-        "attempts_log": []
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-18 19:08"
+        ]
       },
       "tiktok": {
-        "status": "pending",
-        "attempts_count": 0,
-        "attempts_log": []
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-18 19:12"
+        ]
       }
     }
   },
   "project_25": {
     "IT": {
       "youtube": {
-        "status": "pending",
-        "attempts_count": 0,
-        "attempts_log": []
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-19 00:40"
+        ]
       },
       "facebook": {
-        "status": "pending",
-        "attempts_count": 0,
-        "attempts_log": []
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-19 00:44"
+        ]
       },
       "instagram": {
-        "status": "pending",
-        "attempts_count": 0,
-        "attempts_log": []
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-19 00:44"
+        ]
       },
       "tiktok": {
-        "status": "pending",
-        "attempts_count": 0,
-        "attempts_log": []
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-19 00:48"
+        ]
       }
     }
   },
   "project_26": {
     "IT": {
       "youtube": {
-        "status": "pending",
-        "attempts_count": 0,
-        "attempts_log": []
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-19 00:59"
+        ]
       },
       "facebook": {
-        "status": "pending",
-        "attempts_count": 0,
-        "attempts_log": []
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-19 01:01"
+        ]
       },
       "instagram": {
-        "status": "pending",
-        "attempts_count": 0,
-        "attempts_log": []
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-19 01:01"
+        ]
       },
       "tiktok": {
-        "status": "pending",
-        "attempts_count": 0,
-        "attempts_log": []
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-19 01:04"
+        ]
       }
     }
   },
   "project_27": {
     "IT": {
       "youtube": {
-        "status": "pending",
-        "attempts_count": 0,
-        "attempts_log": []
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-19 01:34"
+        ]
       },
       "facebook": {
-        "status": "pending",
-        "attempts_count": 0,
-        "attempts_log": []
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-19 01:39"
+        ]
       },
       "instagram": {
-        "status": "pending",
-        "attempts_count": 0,
-        "attempts_log": []
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-19 01:39"
+        ]
       },
       "tiktok": {
-        "status": "pending",
-        "attempts_count": 0,
-        "attempts_log": []
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-19 01:43"
+        ]
+      }
+    }
+  },
+  "project_28": {
+    "IT": {
+      "youtube": {
+        "status": "success",
+        "attempts_count": 2,
+        "attempts_log": [
+          "2026-07-22 19:50",
+          "2026-07-22 19:52"
+        ]
+      },
+      "facebook": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-22 19:55"
+        ]
+      },
+      "instagram": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-22 19:55"
+        ]
+      },
+      "tiktok": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-22 19:59"
+        ]
+      }
+    }
+  },
+  "project_29": {
+    "IT": {
+      "youtube": {
+        "status": "success",
+        "attempts_count": 2,
+        "attempts_log": [
+          "2026-07-22 20:03",
+          "2026-07-22 20:04"
+        ]
+      },
+      "facebook": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-22 20:08"
+        ]
+      },
+      "instagram": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-22 20:08"
+        ]
+      },
+      "tiktok": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-22 20:12"
+        ]
+      }
+    }
+  },
+  "project_30": {
+    "IT": {
+      "youtube": {
+        "status": "success",
+        "attempts_count": 3,
+        "attempts_log": [
+          "2026-07-22 20:17",
+          "2026-07-22 20:19",
+          "2026-07-22 20:21"
+        ]
+      },
+      "facebook": {
+        "status": "success",
+        "attempts_count": 3,
+        "attempts_log": [
+          "2026-07-22 20:19",
+          "2026-07-22 20:19",
+          "2026-07-22 20:23"
+        ]
+      },
+      "instagram": {
+        "status": "success",
+        "attempts_count": 3,
+        "attempts_log": [
+          "2026-07-22 20:19",
+          "2026-07-22 20:19",
+          "2026-07-22 20:23"
+        ]
+      },
+      "tiktok": {
+        "status": "success",
+        "attempts_count": 3,
+        "attempts_log": [
+          "2026-07-22 20:19",
+          "2026-07-22 20:20",
+          "2026-07-22 20:26"
+        ]
+      }
+    }
+  },
+  "project_31": {
+    "IT": {
+      "youtube": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-22 20:32"
+        ]
+      },
+      "facebook": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-22 20:35"
+        ]
+      },
+      "instagram": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-22 20:35"
+        ]
+      },
+      "tiktok": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-22 20:38"
+        ]
+      }
+    }
+  },
+  "project_32": {
+    "IT": {
+      "youtube": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-22 20:42"
+        ]
+      },
+      "facebook": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-22 20:46"
+        ]
+      },
+      "instagram": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-22 20:46"
+        ]
+      },
+      "tiktok": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-22 20:50"
+        ]
+      }
+    }
+  },
+  "project_33": {
+    "IT": {
+      "youtube": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-22 20:58"
+        ]
+      },
+      "facebook": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-22 21:01"
+        ]
+      },
+      "instagram": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-22 21:01"
+        ]
+      },
+      "tiktok": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-22 21:04"
+        ]
+      }
+    }
+  },
+  "project_34": {
+    "IT": {
+      "youtube": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-22 21:08"
+        ]
+      },
+      "facebook": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-22 21:11"
+        ]
+      },
+      "instagram": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-22 21:11"
+        ]
+      },
+      "tiktok": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-22 21:15"
+        ]
+      }
+    }
+  },
+  "project_35": {
+    "IT": {
+      "youtube": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-22 21:24"
+        ]
+      },
+      "facebook": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-22 21:27"
+        ]
+      },
+      "instagram": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-22 21:27"
+        ]
+      },
+      "tiktok": {
+        "status": "success",
+        "attempts_count": 1,
+        "attempts_log": [
+          "2026-07-22 21:30"
+        ]
       }
     }
   }
