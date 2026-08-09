@@ -344,36 +344,86 @@ def _set_video_file(page: Page, video_path: Path) -> None:
         logger.warning("Upload progress bar not detected within 8s — proceeding anyway.")
 
 
+def _ensure_upload_dialog_open(page: Page) -> None:
+    """Check if the upload dialog is minimized into the bottom widget, and expand it if so."""
+    try:
+        dialog = page.locator("ytcp-uploads-dialog").first
+        if dialog.is_visible():
+            return
+
+        logger.warning("Upload dialog appears minimized or hidden. Attempting to expand…")
+
+        expand_selectors = [
+            "#edit-button",
+            "ytcp-icon-button#edit-button",
+            "ytcp-video-upload-progress #edit-button",
+            'button[aria-label*="Edit"]',
+            'ytcp-button[aria-label*="Edit"]',
+            "ytcp-video-upload-progress-item #edit-button",
+            "ytcp-video-upload-progress",
+        ]
+
+        for sel in expand_selectors:
+            try:
+                if page.locator(sel).first.is_visible():
+                    page.locator(sel).first.click(force=True)
+                    logger.info("Clicked edit/expand button on minimized upload widget (%s).", sel)
+                    human_sleep(1.5, 2.5)
+                    break
+            except Exception:
+                continue
+
+        page.wait_for_selector("ytcp-uploads-dialog", state="visible", timeout=8_000)
+    except Exception as exc:
+        logger.debug("Error while checking/expanding upload dialog: %s", exc)
+
+
+def _scroll_upload_dialog(page: Page) -> None:
+    """Scroll the ytcp-uploads-dialog scrollable container safely without using global Escape/PageDown."""
+    _ensure_upload_dialog_open(page)
+    logger.info("Scrolling upload dialog to reveal lazy-loaded elements…")
+    try:
+        scrollable = page.locator("ytcp-uploads-dialog #scrollable-content, #scrollable-content").first
+        if scrollable.is_visible():
+            for _ in range(3):
+                scrollable.evaluate("(el) => el.scrollTop += 600")
+                human_sleep(0.4, 0.8)
+            return
+    except Exception as exc:
+        logger.debug("scrollTop evaluation failed: %s", exc)
+
+    try:
+        show_more = page.locator(SEL.SHOW_MORE_BTN).first
+        if show_more.is_attached():
+            show_more.scroll_into_view_if_needed(timeout=3_000)
+    except Exception:
+        pass
+
+
 def _fill_details(page: Page, metadata: dict) -> None:
     """Fill the title, description, and tags fields using the new YouTube metadata schema."""
     yt_meta = metadata.get("youtube", {})
+
+    _ensure_upload_dialog_open(page)
 
     # Title
     logger.info("Typing title…")
     _clear_and_type(page, SEL.TITLE_FIELD, yt_meta.get("title", ""))
     human_sleep(0.5, 1.2)
-    page.keyboard.press("Escape")   # dismiss any hashtag dropdown
-    human_sleep(0.3, 0.5)
 
     # Description
     logger.info("Pasting description…")
     _paste_text(page, SEL.DESC_FIELD, yt_meta.get("description", ""))
     human_sleep(0.6, 1.4)
-    page.keyboard.press("Escape")
-    human_sleep(0.2, 0.5)
     page.keyboard.press("Tab")
-    human_sleep(1.0, 2.0)
+    human_sleep(0.5, 1.0)
 
     # Scroll to trigger lazy-loaded lower elements (Audience, Tags)
-    logger.info("Scrolling to reveal lazy-loaded elements…")
-    page.mouse.move(x=400, y=400)
-    for _ in range(3):
-        page.mouse.wheel(delta_y=800, delta_x=0)
-        human_sleep(0.5, 1.2)
-        page.keyboard.press("PageDown")
+    _scroll_upload_dialog(page)
 
     # Tags — reveal via "Show more" button
     logger.info("Filling tags…")
+    _ensure_upload_dialog_open(page)
     try:
         page.wait_for_selector(SEL.SHOW_MORE_BTN, state="attached", timeout=6_000)
         page.locator(SEL.SHOW_MORE_BTN).first.scroll_into_view_if_needed(timeout=2_000)
@@ -409,12 +459,15 @@ def _fill_details(page: Page, metadata: dict) -> None:
 
 def _set_audience(page: Page) -> None:
     logger.info("Setting audience to 'Not made for kids'…")
+    _ensure_upload_dialog_open(page)
     _click(page, SEL.NOT_KIDS_RADIO)
     human_sleep(0.5, 1.2)
 
 
+
 def _click_next(page: Page, step_label: str) -> None:
     """Click the NEXT button, waiting first for it to become enabled."""
+    _ensure_upload_dialog_open(page)
     logger.info("Clicking NEXT from step: %s", step_label)
     human_sleep(0.8, 2.0)
     try:

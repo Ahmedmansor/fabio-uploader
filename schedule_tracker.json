@@ -978,5 +978,89 @@
         ]
       }
     }
+  },
+  "2026-08-03": {
+    "IT": {
+      "youtube": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      },
+      "facebook": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      },
+      "instagram": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      },
+      "tiktok": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      }
+    }
+  },
+  "2026-08-06": {
+    "IT": {
+      "youtube": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      },
+      "facebook": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      },
+      "instagram": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      },
+      "tiktok": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      }
+    }
+  },
+  "2026-08-09": {
+    "IT": {
+      "youtube": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      },
+      "tiktok": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      },
+      "facebook": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      },
+      "instagram": {
+        "count": 1,
+        "scheduled_times": [
+          "21:00"
+        ]
+      }
+    }
   }
 }
