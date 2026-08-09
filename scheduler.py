@@ -1,33 +1,37 @@
 """
 scheduler.py — Egypt-timezone scheduling logic for Fabio_Uploader.
 
-Rule: ONE upload per day, per language, per platform.
+Rule: Configurable frequency (Every day, Every other day, or 1 day on / 2 days off).
+Reads and checks bookings directly from upload_state.json.
 
-schedule_tracker.json schema (v2 — per-platform):
+Unified upload_state.json schema (v4):
 {
-    "2026-06-23": {
-        "IT": {
-            "youtube":   {"count": 1, "scheduled_times": ["21:00"]},
-            "facebook":  {"count": 1, "scheduled_times": ["21:00"]},
-            "instagram": {"count": 1, "scheduled_times": ["21:00"]}
-        }
+  "project_1": {
+    "IT": {
+      "youtube": {
+        "status": "success",
+        "scheduled_date": "2026-08-09",
+        "scheduled_time": "21:00",
+        "attempts_count": 1,
+        "attempts_log": ["2026-08-09 04:30"]
+      },
+      "facebook": {
+        "status": "success",
+        "scheduled_date": "2026-08-09",
+        "scheduled_time": "21:00",
+        "attempts_count": 1,
+        "attempts_log": ["2026-08-09 04:33"]
+      },
+      ...
     }
+  }
 }
-
-Algorithm:
-  For YouTube : reads PEAK_TIMES from config.py.
-  For Meta    : reads META_PEAK_TIMES from pipeline_config.py.
-  Both scan forward from today until a day is found where the platform's
-  count is 0 AND the peak-time slot is more than 2 minutes in the future.
 """
 
 import json
 import logging
-import os
-import tempfile
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
-
 import pytz
 
 from config import (
@@ -35,7 +39,12 @@ from config import (
     LANGUAGES,
     MAX_UPLOADS_PER_LANG_PER_DAY,
     PEAK_TIMES,
-    SCHEDULE_TRACKER_FILE,
+    UPLOAD_STATE_FILE,
+)
+from pipeline_config import (
+    META_PEAK_TIMES,
+    TIKTOK_PEAK_TIMES,
+    get_schedule_cadence_step_days,
 )
 
 logger = logging.getLogger(__name__)
@@ -43,66 +52,59 @@ logger = logging.getLogger(__name__)
 _tz = pytz.timezone(EGYPT_TIMEZONE)
 
 
-# ─── Tracker I/O (atomic write) ───────────────────────────────────────────────
+# ─── State Helpers ────────────────────────────────────────────────────────────
 
-def load_schedule_tracker() -> dict:
-    """Load schedule_tracker.json. Returns {} if missing or corrupt."""
-    if not SCHEDULE_TRACKER_FILE.exists():
+def load_upload_state() -> dict:
+    """Load upload_state.json from disk. Returns {} if missing or corrupt."""
+    if not UPLOAD_STATE_FILE.exists():
         return {}
     try:
-        with SCHEDULE_TRACKER_FILE.open("r", encoding="utf-8") as fh:
+        with UPLOAD_STATE_FILE.open("r", encoding="utf-8") as fh:
             return json.load(fh)
     except json.JSONDecodeError as exc:
-        logger.error("schedule_tracker.json corrupted (%s) — starting fresh.", exc)
+        logger.error("upload_state.json corrupted (%s) — starting fresh.", exc)
         return {}
 
 
-def save_schedule_tracker(tracker: dict) -> None:
-    """Write tracker atomically (temp-file → rename) to prevent corruption."""
-    parent = SCHEDULE_TRACKER_FILE.parent
-    parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_path = tempfile.mkstemp(dir=parent, suffix=".tmp", prefix="sched_")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            json.dump(tracker, fh, ensure_ascii=False, indent=2)
-        os.replace(tmp_path, SCHEDULE_TRACKER_FILE)
-        logger.debug("schedule_tracker.json saved.")
-    except Exception:
+def get_booked_dates(state: dict, lang: str, platform: str) -> set[str]:
+    """Return a set of date_keys ('YYYY-MM-DD') that are already booked for this lang/platform."""
+    booked = set()
+    for folder_name, folder_data in state.items():
+        if not isinstance(folder_data, dict):
+            continue
+        lang_data = folder_data.get(lang, {})
+        if not isinstance(lang_data, dict):
+            continue
+        p_data = lang_data.get(platform, {})
+        if not isinstance(p_data, dict):
+            continue
+
+        st_date = p_data.get("scheduled_date")
+        status = p_data.get("status", "")
+        # Booked if successfully uploaded with a scheduled date
+        if st_date and status == "success":
+            booked.add(st_date)
+    return booked
+
+
+def get_latest_scheduled_date(state: dict, lang: str, platform: str) -> date | None:
+    """Find the most future scheduled date for this lang/platform."""
+    booked = get_booked_dates(state, lang, platform)
+    dates: list[date] = []
+    for d_str in booked:
         try:
-            os.unlink(tmp_path)
-        except OSError:
+            dates.append(datetime.strptime(d_str, "%Y-%m-%d").date())
+        except ValueError:
             pass
-        raise
+    return max(dates) if dates else None
 
 
 # ─── Internal Helpers ─────────────────────────────────────────────────────────
 
-def _build_candidate(date: "datetime.date", slot: dict) -> datetime:
+def _build_candidate(target_date: date, slot: dict) -> datetime:
     """Build a timezone-aware datetime from a calendar date + slot dict."""
-    naive = datetime(date.year, date.month, date.day, slot["hour"], slot["minute"], 0)
+    naive = datetime(target_date.year, target_date.month, target_date.day, slot["hour"], slot["minute"], 0)
     return _tz.localize(naive)
-
-
-def _get_platform_count(
-    tracker: dict, date_key: str, lang: str, platform: str
-) -> int:
-    """Safely read the upload count for one platform on one day. Defaults to 0."""
-    return (
-        tracker
-        .get(date_key, {})
-        .get(lang, {})
-        .get(platform, {})
-        .get("count", 0)
-    )
-
-
-def _ensure_platform_entry(
-    tracker: dict, date_key: str, lang: str, platform: str
-) -> None:
-    """Create nested dict entries without overwriting existing data."""
-    tracker.setdefault(date_key, {})
-    tracker[date_key].setdefault(lang, {})
-    tracker[date_key][lang].setdefault(platform, {"count": 0, "scheduled_times": []})
 
 
 # ─── Public Scheduling API ────────────────────────────────────────────────────
@@ -110,178 +112,155 @@ def _ensure_platform_entry(
 def get_next_slot(lang: str, platform: str) -> tuple[datetime, str]:
     """
     Find the next available upload slot for *lang* on *platform* (YouTube).
-
-    Reads peak times from config.PEAK_TIMES.
+    Applies the cadence step configured in pipeline_config.py.
 
     Returns:
-        (scheduled_datetime, date_key_str)  e.g. (datetime(...), "2026-06-24")
-
-    Raises:
-        RuntimeError: if no free slot is found within 30 days.
+        (scheduled_datetime, date_key_str)  e.g. (datetime(...), "2026-08-09")
     """
-    tracker = load_schedule_tracker()
-    now     = datetime.now(_tz)
-    today   = now.date()
-    trains  = PEAK_TIMES[lang]
+    state = load_upload_state()
+    booked = get_booked_dates(state, lang, platform)
+    latest_date = get_latest_scheduled_date(state, lang, platform)
+    step = get_schedule_cadence_step_days()
 
-    for day_offset in range(31):
-        candidate_date = today + timedelta(days=day_offset)
-        date_key       = candidate_date.isoformat()
-        day_count      = _get_platform_count(tracker, date_key, lang, platform)
+    now = datetime.now(_tz)
+    today = now.date()
+    trains = PEAK_TIMES[lang]
+    slot = trains[0]  # Primary peak slot
 
-        if day_count >= MAX_UPLOADS_PER_LANG_PER_DAY:
-            logger.debug(
-                "[%s][%s] %s fully booked (%d/%d) — skipping.",
-                lang, platform, date_key, day_count, MAX_UPLOADS_PER_LANG_PER_DAY,
-            )
+    # Determine start candidate date
+    if latest_date is None or latest_date < today:
+        candidate_date = today
+    else:
+        candidate_date = latest_date + timedelta(days=step)
+
+    # Search for the next available slot
+    for _ in range(60):
+        # If candidate is today, verify peak time is in the future
+        candidate_dt = _build_candidate(candidate_date, slot)
+        if candidate_date == today and candidate_dt <= now + timedelta(minutes=2):
+            # Peak time for today has passed, advance
+            if latest_date is None or latest_date < today:
+                candidate_date = today + timedelta(days=1)
+            else:
+                candidate_date = max(today + timedelta(days=1), latest_date + timedelta(days=step))
             continue
 
-        for slot in trains:
-            candidate_dt = _build_candidate(candidate_date, slot)
-            if candidate_dt > now + timedelta(minutes=2):
-                logger.info(
-                    "[%s][%s] Next slot → %s at %s (Egypt TZ)",
-                    lang, platform, date_key, candidate_dt.strftime("%H:%M %Z"),
-                )
-                return candidate_dt, date_key
+        date_key = candidate_date.isoformat()
+        if date_key not in booked:
+            logger.info(
+                "[%s][%s] Next slot (cadence step=%d) → %s at %s (Egypt TZ)",
+                lang, platform, step, date_key, candidate_dt.strftime("%H:%M %Z"),
+            )
+            return candidate_dt, date_key
+
+        candidate_date += timedelta(days=step)
 
     raise RuntimeError(
-        f"[{lang}][{platform}] No available slot found within 30 days. "
-        "Check schedule_tracker.json for anomalies."
+        f"[{lang}][{platform}] No available slot found within search window. "
+        "Check upload_state.json for anomalies."
     )
 
 
 def get_next_slot_meta(lang: str) -> tuple[datetime, str]:
     """
     Find the next available slot for Meta (Facebook + Instagram together).
-
-    Reads peak times from pipeline_config.META_PEAK_TIMES.
-    Both 'facebook' and 'instagram' counts must be below the daily cap
-    on the chosen day (they are always uploaded in the same session).
+    Applies the cadence step configured in pipeline_config.py.
 
     Returns:
         (scheduled_datetime, date_key_str)
-
-    Raises:
-        RuntimeError: if no free slot is found within 30 days.
     """
-    from pipeline_config import META_PEAK_TIMES  # lazy import avoids circular deps
+    state = load_upload_state()
+    fb_booked = get_booked_dates(state, lang, "facebook")
+    ig_booked = get_booked_dates(state, lang, "instagram")
+    all_booked = fb_booked | ig_booked
 
-    tracker = load_schedule_tracker()
-    now     = datetime.now(_tz)
-    today   = now.date()
-    trains  = META_PEAK_TIMES[lang]
+    fb_latest = get_latest_scheduled_date(state, lang, "facebook")
+    ig_latest = get_latest_scheduled_date(state, lang, "instagram")
+    latest_candidates = [d for d in (fb_latest, ig_latest) if d is not None]
+    latest_date = max(latest_candidates) if latest_candidates else None
 
-    for day_offset in range(31):
-        candidate_date = today + timedelta(days=day_offset)
-        date_key       = candidate_date.isoformat()
-        fb_count       = _get_platform_count(tracker, date_key, lang, "facebook")
-        ig_count       = _get_platform_count(tracker, date_key, lang, "instagram")
+    step = get_schedule_cadence_step_days()
+    now = datetime.now(_tz)
+    today = now.date()
+    trains = META_PEAK_TIMES[lang]
+    slot = trains[0]
 
-        if (fb_count >= MAX_UPLOADS_PER_LANG_PER_DAY or
-                ig_count >= MAX_UPLOADS_PER_LANG_PER_DAY):
-            logger.debug(
-                "[%s][meta] %s fully booked (fb=%d, ig=%d) — skipping.",
-                lang, date_key, fb_count, ig_count,
-            )
+    if latest_date is None or latest_date < today:
+        candidate_date = today
+    else:
+        candidate_date = latest_date + timedelta(days=step)
+
+    for _ in range(60):
+        candidate_dt = _build_candidate(candidate_date, slot)
+        if candidate_date == today and candidate_dt <= now + timedelta(minutes=2):
+            if latest_date is None or latest_date < today:
+                candidate_date = today + timedelta(days=1)
+            else:
+                candidate_date = max(today + timedelta(days=1), latest_date + timedelta(days=step))
             continue
 
-        for slot in trains:
-            candidate_dt = _build_candidate(candidate_date, slot)
-            if candidate_dt > now + timedelta(minutes=2):
-                logger.info(
-                    "[%s][meta] Next slot → %s at %s (Egypt TZ)",
-                    lang, date_key, candidate_dt.strftime("%H:%M %Z"),
-                )
-                return candidate_dt, date_key
+        date_key = candidate_date.isoformat()
+        if date_key not in all_booked:
+            logger.info(
+                "[%s][meta] Next slot (cadence step=%d) → %s at %s (Egypt TZ)",
+                lang, step, date_key, candidate_dt.strftime("%H:%M %Z"),
+            )
+            return candidate_dt, date_key
+
+        candidate_date += timedelta(days=step)
 
     raise RuntimeError(
-        f"[{lang}][meta] No available Meta slot found within 30 days. "
-        "Check schedule_tracker.json for anomalies."
+        f"[{lang}][meta] No available Meta slot found within search window. "
+        "Check upload_state.json for anomalies."
     )
 
 
 def get_next_slot_tiktok(lang: str) -> tuple[datetime, str]:
     """
     Find the next available slot for TikTok.
-
-    Reads peak times from pipeline_config.TIKTOK_PEAK_TIMES.
+    Applies the cadence step configured in pipeline_config.py.
 
     Returns:
         (scheduled_datetime, date_key_str)
     """
-    from pipeline_config import TIKTOK_PEAK_TIMES  # lazy import avoids circular deps
+    state = load_upload_state()
+    booked = get_booked_dates(state, lang, "tiktok")
+    latest_date = get_latest_scheduled_date(state, lang, "tiktok")
+    step = get_schedule_cadence_step_days()
 
-    tracker = load_schedule_tracker()
-    now     = datetime.now(_tz)
-    today   = now.date()
-    trains  = TIKTOK_PEAK_TIMES[lang]
+    now = datetime.now(_tz)
+    today = now.date()
+    trains = TIKTOK_PEAK_TIMES[lang]
+    slot = trains[0]
 
-    for day_offset in range(31):
-        candidate_date = today + timedelta(days=day_offset)
-        date_key       = candidate_date.isoformat()
-        tt_count       = _get_platform_count(tracker, date_key, lang, "tiktok")
+    if latest_date is None or latest_date < today:
+        candidate_date = today
+    else:
+        candidate_date = latest_date + timedelta(days=step)
 
-        if tt_count >= MAX_UPLOADS_PER_LANG_PER_DAY:
-            logger.debug(
-                "[%s][tiktok] %s fully booked (tiktok=%d) — skipping.",
-                lang, date_key, tt_count,
-            )
+    for _ in range(60):
+        candidate_dt = _build_candidate(candidate_date, slot)
+        if candidate_date == today and candidate_dt <= now + timedelta(minutes=2):
+            if latest_date is None or latest_date < today:
+                candidate_date = today + timedelta(days=1)
+            else:
+                candidate_date = max(today + timedelta(days=1), latest_date + timedelta(days=step))
             continue
 
-        for slot in trains:
-            candidate_dt = _build_candidate(candidate_date, slot)
-            if candidate_dt > now + timedelta(minutes=2):
-                logger.info(
-                    "[%s][tiktok] Next slot → %s at %s (Egypt TZ)",
-                    lang, date_key, candidate_dt.strftime("%H:%M %Z"),
-                )
-                return candidate_dt, date_key
+        date_key = candidate_date.isoformat()
+        if date_key not in booked:
+            logger.info(
+                "[%s][tiktok] Next slot (cadence step=%d) → %s at %s (Egypt TZ)",
+                lang, step, date_key, candidate_dt.strftime("%H:%M %Z"),
+            )
+            return candidate_dt, date_key
+
+        candidate_date += timedelta(days=step)
 
     raise RuntimeError(
-        f"[{lang}][tiktok] No available TikTok slot found within 30 days. "
-        "Check schedule_tracker.json for anomalies."
+        f"[{lang}][tiktok] No available TikTok slot found within search window. "
+        "Check upload_state.json for anomalies."
     )
-
-
-def increment_upload_count(
-    lang: str,
-    platform: str,
-    date_key: str,
-    scheduled_time: datetime,
-) -> None:
-    """
-    Record one successful upload for *lang* + *platform* on *date_key*.
-
-    Increments the count and appends the scheduled time ("HH:MM") to the
-    scheduled_times list for full audit transparency.
-
-    MUST be called ONLY after a confirmed successful upload.
-    """
-    tracker  = load_schedule_tracker()
-    time_str = scheduled_time.strftime("%H:%M")
-
-    _ensure_platform_entry(tracker, date_key, lang, platform)
-    tracker[date_key][lang][platform]["count"] += 1
-    tracker[date_key][lang][platform]["scheduled_times"].append(time_str)
-
-    save_schedule_tracker(tracker)
-    logger.info(
-        "[%s][%s] Tracker updated: %s → count=%d, times=%s",
-        lang, platform, date_key,
-        tracker[date_key][lang][platform]["count"],
-        tracker[date_key][lang][platform]["scheduled_times"],
-    )
-
-
-def get_daily_count(lang: str, platform: str, date_key: str | None = None) -> int:
-    """
-    Return the upload count for *lang* + *platform* on *date_key*.
-    Defaults to today (Egypt TZ) if date_key is not provided.
-    """
-    if date_key is None:
-        date_key = datetime.now(_tz).date().isoformat()
-    return _get_platform_count(load_schedule_tracker(), date_key, lang, platform)
 
 
 def format_scheduled_time_for_yt(dt: datetime) -> tuple[str, str]:

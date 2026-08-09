@@ -30,7 +30,6 @@ UPLOAD_QUEUE_DIR       = BASE_DIR / "Upload_Queue"
 UPLOADED_DONE_DIR      = BASE_DIR / "Uploaded_Done"
 LOGS_DIR               = BASE_DIR / "logs"
 UPLOAD_STATE_FILE      = BASE_DIR / "upload_state.json"
-SCHEDULE_TRACKER_FILE  = BASE_DIR / "schedule_tracker.json"
 
 # ─── Active Languages (Phase 1: IT only) ──────────────────────────────────────
 # To add English in the future: append "EN" here and fill the dicts below.

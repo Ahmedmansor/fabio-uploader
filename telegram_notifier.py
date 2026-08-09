@@ -16,7 +16,6 @@ from PIL import Image
 
 from config import (
     UPLOAD_STATE_FILE,
-    SCHEDULE_TRACKER_FILE,
     UPLOAD_QUEUE_DIR,
     UPLOADED_DONE_DIR,
 )
@@ -76,23 +75,18 @@ def send_telegram_report(
     lang = langs[0]  # Usually "IT"
     platform_data = project_state[lang]
 
-    # 2. Parse schedule_tracker.json
-    tracker = {}
-    if SCHEDULE_TRACKER_FILE.exists():
-        try:
-            with open(SCHEDULE_TRACKER_FILE, "r", encoding="utf-8") as f:
-                tracker = json.load(f)
-        except Exception as exc:
-            logger.warning("[Telegram] Could not load schedule_tracker.json: %s", exc)
-
-    # 3. Calculate metrics
+    # 2. Calculate metrics
     total_attempts = 0
     platform_lines = []
 
     for platform, details in platform_data.items():
+        scheduled_date = None
+        scheduled_time = None
         if isinstance(details, dict):
             status = details.get("status", "unknown")
             attempts = details.get("attempts_count", 0)
+            scheduled_date = details.get("scheduled_date")
+            scheduled_time = details.get("scheduled_time")
         else:
             status = str(details)
             attempts = 0
@@ -102,15 +96,12 @@ def send_telegram_report(
         except (ValueError, TypeError):
             pass
 
-        # Look up scheduled times from tracker across all date keys
-        scheduled_info = "N/A"
-        for date_key in sorted(tracker.keys(), reverse=True):
-            lang_data = tracker[date_key].get(lang, {})
-            p_data = lang_data.get(platform, {})
-            times = p_data.get("scheduled_times", [])
-            if times:
-                scheduled_info = f"{date_key} {times[-1]}"
-                break
+        if scheduled_date and scheduled_time:
+            scheduled_info = f"{scheduled_date} {scheduled_time}"
+        elif scheduled_date:
+            scheduled_info = f"{scheduled_date}"
+        else:
+            scheduled_info = "N/A"
 
         # Select emoji based on status
         status_lower = status.lower()

@@ -19,6 +19,37 @@ ENABLE_FACEBOOK  = True
 ENABLE_INSTAGRAM = True
 ENABLE_TIKTOK    = True
 
+# ─── Upload Schedule Cadence / Frequency ─────────────────────────────────────
+# Exactly ONE of these boolean flags should be True.
+#   - SCHEDULE_EVERY_DAY       : Every day (يومياً) -> +1 day interval
+#   - SCHEDULE_EVERY_OTHER_DAY : Day on, day off (يوم ويوم) -> +2 days interval
+#   - SCHEDULE_EVERY_3_DAYS    : 1 day on, 2 days off (يوم ويومين لا) -> +3 days interval
+SCHEDULE_EVERY_DAY       = False
+SCHEDULE_EVERY_OTHER_DAY = False
+SCHEDULE_EVERY_3_DAYS    = True
+
+
+def get_schedule_cadence_step_days() -> int:
+    """
+    Validate active frequency flags and return interval in days.
+    Guarantees exactly one active step (defaults to 3 days if misconfigured).
+    """
+    active_modes = [
+        ("EVERY_DAY", SCHEDULE_EVERY_DAY, 1),
+        ("EVERY_OTHER_DAY", SCHEDULE_EVERY_OTHER_DAY, 2),
+        ("EVERY_3_DAYS", SCHEDULE_EVERY_3_DAYS, 3),
+    ]
+    selected = [mode for mode in active_modes if mode[1]]
+    if len(selected) == 1:
+        return selected[0][2]
+    
+    # If user selected multiple or none by mistake, default to SCHEDULE_EVERY_3_DAYS (3 days)
+    if SCHEDULE_EVERY_DAY:
+        return 1
+    if SCHEDULE_EVERY_OTHER_DAY:
+        return 2
+    return 3
+
 # ─── Telegram Notifier ───────────────────────────────────────────────────────
 # True  → send notification to Telegram Bot if bot credentials exist in .env.
 # False → disabled.

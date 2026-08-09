@@ -5,17 +5,20 @@ Platforms:  YouTube  →  Meta (Facebook + Instagram).
 Control:    Edit ENABLE_YOUTUBE / ENABLE_FACEBOOK / ENABLE_INSTAGRAM in
             pipeline_config.py before each run.
 
-upload_state.json schema (v3 — per-platform with attempt tracking):
+upload_state.json schema (v4 — unified state & schedule tracker):
 {
   "project_1": {
     "IT": {
       "youtube": {
         "status":         "pending|loading|success|error|skipped by the user",
+        "scheduled_date": "2026-08-09",
+        "scheduled_time": "21:00",
         "attempts_count": 2,
-        "attempts_log":   ["2026-06-23 21:00", "2026-06-24 00:05"]
+        "attempts_log":   ["2026-08-09 04:30", "2026-08-09 04:35"]
       },
       "facebook":  { ... same structure ... },
-      "instagram": { ... same structure ... }
+      "instagram": { ... same structure ... },
+      "tiktok":    { ... same structure ... }
     }
   }
 }
@@ -32,7 +35,7 @@ Queue / retry logic (per platform):
 
 Midnight-crossing safety:
   attempt tracking is date-stamped. If a run fails at 23:55 and resumes
-  at 00:05, the scheduler finds the next free day from schedule_tracker.json
+  at 00:05, the scheduler finds the next free day from upload_state.json
   while the state machine still sees "error" → project is resumed correctly.
 
 Facebook + Instagram note:
@@ -83,7 +86,6 @@ from scheduler import (
     get_next_slot,
     get_next_slot_meta,
     get_next_slot_tiktok,
-    increment_upload_count,
 )
 from utils import (
     ensure_dirs,
@@ -143,15 +145,19 @@ def _is_platform_enabled(platform: str) -> bool:
 
 def _init_platform_state() -> dict:
     """
-    Return a fresh per-platform state entry (v3 schema).
+    Return a fresh per-platform state entry (v4 unified schema).
     {
         "status":         "pending",
+        "scheduled_date": None,
+        "scheduled_time": None,
         "attempts_count": 0,
         "attempts_log":   []
     }
     """
     return {
         "status":         STATUS_PENDING,
+        "scheduled_date": None,
+        "scheduled_time": None,
         "attempts_count": 0,
         "attempts_log":   [],
     }
@@ -212,11 +218,8 @@ def _save_state(state: dict) -> None:
 
 def _ensure_platform_dict(state: dict, folder: str, lang: str) -> None:
     """
-    Ensure every platform for (folder, lang) is a proper v3 dict.
-    Migrates automatically from:
-      v1: {"IT": "success"}          → flat string on the lang level
-      v2: {"IT": {"youtube": "ok"}}  → flat string on the platform level
-      v3: {"IT": {"youtube": {...}}} → already correct
+    Ensure every platform for (folder, lang) is a proper v4 dict.
+    Preserves existing status, scheduled dates/times, and attempt logs.
     """
     state.setdefault(folder, {}).setdefault(lang, {})
     lang_entry = state[folder][lang]
@@ -232,24 +235,46 @@ def _ensure_platform_dict(state: dict, folder: str, lang: str) -> None:
             # Missing platform — initialise fresh
             lang_entry[p] = _init_platform_state()
         elif isinstance(p_entry, str):
-            # v2 flat string → v3 dict (preserve the old status)
+            # v2 flat string → v4 dict (preserve the old status)
             old_status = p_entry
             lang_entry[p] = _init_platform_state()
             lang_entry[p]["status"] = old_status
-        # else: already a v3 dict — leave it alone
+        elif isinstance(p_entry, dict):
+            # Ensure v4 schema keys exist
+            p_entry.setdefault("status", STATUS_PENDING)
+            p_entry.setdefault("scheduled_date", None)
+            p_entry.setdefault("scheduled_time", None)
+            p_entry.setdefault("attempts_count", 0)
+            p_entry.setdefault("attempts_log", [])
 
 
 def _set_status(
-    state: dict, folder: str, lang: str, platform: str, status: str
+    state: dict,
+    folder: str,
+    lang: str,
+    platform: str,
+    status: str,
+    scheduled_date: str | None = None,
+    scheduled_time: str | None = None,
 ) -> dict:
     """
-    Update one platform's status and persist immediately.
+    Update one platform's status (and optionally scheduled date/time) and persist immediately.
     Preserves existing attempts_count and attempts_log.
     """
     _ensure_platform_dict(state, folder, lang)
-    state[folder][lang][platform]["status"] = status
+    entry = state[folder][lang][platform]
+    entry["status"] = status
+    if scheduled_date is not None:
+        entry["scheduled_date"] = scheduled_date
+    if scheduled_time is not None:
+        entry["scheduled_time"] = scheduled_time
     _save_state(state)
-    logger.info("[%s][%s][%s] Status → %s", folder, lang, platform, status.upper())
+    logger.info(
+        "[%s][%s][%s] Status → %s%s",
+        folder, lang, platform, status.upper(),
+        f" (scheduled: {entry.get('scheduled_date')} {entry.get('scheduled_time')})"
+        if entry.get("scheduled_date") else "",
+    )
     return state
 
 
@@ -458,6 +483,7 @@ def _run_youtube(
     """
     lang = "IT"
     yt_scheduled, yt_date_key = get_next_slot(lang, "youtube")
+    yt_time_str = yt_scheduled.strftime("%H:%M")
     state = _set_status(state, folder, lang, "youtube", STATUS_LOADING)
     uploader = YouTubeUploader(lang=lang)
 
@@ -473,8 +499,10 @@ def _run_youtube(
             dry_run=dry_run,
         )
         if success:
-            state = _set_status(state, folder, lang, "youtube", STATUS_SUCCESS)
-            increment_upload_count(lang, "youtube", yt_date_key, yt_scheduled)
+            state = _set_status(
+                state, folder, lang, "youtube", STATUS_SUCCESS,
+                scheduled_date=yt_date_key, scheduled_time=yt_time_str,
+            )
             return state
 
         if attempt == 1:
@@ -504,6 +532,7 @@ def _run_meta(
     """
     lang = "IT"
     meta_scheduled, meta_date_key = get_next_slot_meta(lang)
+    meta_time_str = meta_scheduled.strftime("%H:%M")
     state = _set_status(state, folder, lang, "facebook",  STATUS_LOADING)
     state = _set_status(state, folder, lang, "instagram", STATUS_LOADING)
     uploader = MetaUploader(lang=lang, thumbnail_path=thumbnail_path)
@@ -521,10 +550,14 @@ def _run_meta(
             dry_run=dry_run,
         )
         if success:
-            state = _set_status(state, folder, lang, "facebook",  STATUS_SUCCESS)
-            state = _set_status(state, folder, lang, "instagram", STATUS_SUCCESS)
-            increment_upload_count(lang, "facebook",  meta_date_key, meta_scheduled)
-            increment_upload_count(lang, "instagram", meta_date_key, meta_scheduled)
+            state = _set_status(
+                state, folder, lang, "facebook",  STATUS_SUCCESS,
+                scheduled_date=meta_date_key, scheduled_time=meta_time_str,
+            )
+            state = _set_status(
+                state, folder, lang, "instagram", STATUS_SUCCESS,
+                scheduled_date=meta_date_key, scheduled_time=meta_time_str,
+            )
             return state
 
         if attempt == 1:
@@ -554,6 +587,7 @@ def _run_tiktok(
     """
     lang = "IT"
     tt_scheduled, tt_date_key = get_next_slot_tiktok(lang)
+    tt_time_str = tt_scheduled.strftime("%H:%M")
     state = _set_status(state, folder, lang, "tiktok", STATUS_LOADING)
     uploader = TikTokUploader(lang=lang, thumbnail_path=thumbnail_path)
 
@@ -569,8 +603,10 @@ def _run_tiktok(
             dry_run=dry_run,
         )
         if success:
-            state = _set_status(state, folder, lang, "tiktok", STATUS_SUCCESS)
-            increment_upload_count(lang, "tiktok", tt_date_key, tt_scheduled)
+            state = _set_status(
+                state, folder, lang, "tiktok", STATUS_SUCCESS,
+                scheduled_date=tt_date_key, scheduled_time=tt_time_str,
+            )
             return state
 
         if attempt == 1:
